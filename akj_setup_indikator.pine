@@ -1,0 +1,88 @@
+//@version=5
+indicator("AKJ2 – Weekly Trend Detector", overlay=true)
+
+// ═══════════════════════════════════════════════════════════
+// TIME RANGE
+// ═══════════════════════════════════════════════════════════
+startDate = input.time(timestamp("2020-01-01"), title="Start Date")
+endDate   = input.time(timestamp("2099-12-31"), title="End Date")
+inRange   = time >= startDate and time <= endDate
+
+// ═══════════════════════════════════════════════════════════
+// WEEKLY BOLLINGER BANDS (length=10, mult=1)
+// ═══════════════════════════════════════════════════════════
+bbLen  = 10
+bbMult = 1.0
+
+basis = ta.sma(close, bbLen)
+upper = basis + bbMult * ta.stdev(close, bbLen)
+lower = basis - bbMult * ta.stdev(close, bbLen)
+
+plot(basis, color=color.new(color.gray, 20),  title="BB Mid",   linewidth=1)
+plot(upper, color=color.new(color.blue, 40),  title="BB Upper", linewidth=1)
+plot(lower, color=color.new(color.red,  40),  title="BB Lower", linewidth=1)
+
+// ═══════════════════════════════════════════════════════════
+// WILLIAMS %R (length=4)
+// ═══════════════════════════════════════════════════════════
+willR = ta.wpr(4)
+
+// ═══════════════════════════════════════════════════════════
+// WEEKLY TREND DETECTION
+// Uptrend:   2 consecutive weekly closes ABOVE upper BB
+// Downtrend: 2 consecutive weekly closes BELOW lower BB
+// ═══════════════════════════════════════════════════════════
+aboveUpper = close > upper
+belowLower = close < lower
+
+rawWeeklyUp   = aboveUpper and aboveUpper[1]
+rawWeeklyDown = belowLower and belowLower[1]
+
+// ═══════════════════════════════════════════════════════════
+// LATCHED TREND STATE
+// Only transitions when the OPPOSITE signal fires.
+// A repeated up signal while already in uptrend is ignored.
+// A repeated down signal while already in downtrend is ignored.
+// ═══════════════════════════════════════════════════════════
+var bool inUpTrend   = false
+var bool inDownTrend = false
+
+// Rising edge: only trigger when we ENTER the state, not while inside it
+weeklyUpEdge   = rawWeeklyUp   and not inUpTrend
+weeklyDownEdge = rawWeeklyDown and not inDownTrend
+
+if weeklyUpEdge
+    inUpTrend   := true
+    inDownTrend := false
+
+if weeklyDownEdge
+    inDownTrend := true
+    inUpTrend   := false
+
+// ═══════════════════════════════════════════════════════════
+// TREND START MARKERS — drawn only on the rising edge
+// Blue vertical line = uptrend starts
+// Red vertical line  = downtrend starts
+// ═══════════════════════════════════════════════════════════
+if weeklyUpEdge and inRange
+    line.new(bar_index, low, bar_index, high,
+         color=color.green, width=2, extend=extend.both)
+    label.new(bar_index, high,
+         "UP", color=color.green, textcolor=color.white,
+         size=size.small, style=label.style_label_down)
+
+if weeklyDownEdge and inRange
+    line.new(bar_index, low, bar_index, high,
+         color=color.red, width=2, extend=extend.both)
+    label.new(bar_index, low,
+         "DOWN", color=color.red, textcolor=color.white,
+         size=size.small, style=label.style_label_up)
+
+// ═══════════════════════════════════════════════════════════
+// BACKGROUND SHADING
+// ═══════════════════════════════════════════════════════════
+bgcolor(inUpTrend   ? color.new(color.green, 75) : na, title="Uptrend Zone")
+bgcolor(inDownTrend ? color.new(color.orange,  75) : na, title="Downtrend Zone")
+
+// bgcolor(willR <= -80 ? color.new(color.green, 88) : na, title="WillR Oversold")
+// bgcolor(willR >= -20 ? color.new(color.red,   88) : na, title="WillR Overbought")
