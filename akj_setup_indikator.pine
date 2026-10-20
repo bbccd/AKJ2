@@ -176,6 +176,11 @@ showLvls = setupDir != 0 or evTrigDir != 0
 plot(showLvls ? entryLvl : na, "Entry (Stop-Order)", color.blue, 2, plot.style_linebr)
 plot(showLvls ? slLvl : na, "Stop-Loss", color.red, 1, plot.style_linebr)
 
+// Pfeil auf der Signalkerze (neues Setup oder nachgezogen): L = Long, S = Short
+sigBar = evNewSetup or evMoveSetup
+plotshape(sigBar and setupDir == 1,  "Signal Long",  shape.arrowup,   location.belowbar, color.green, text = "L", textcolor = color.green, size = size.normal)
+plotshape(sigBar and setupDir == -1, "Signal Short", shape.arrowdown, location.abovebar, color.red,   text = "S", textcolor = color.red,   size = size.normal)
+
 plotshape(showEarn and not na(pastEarn), "Earnings", shape.diamond, location.bottom, color.orange, size = size.tiny, text = "E")
 
 // Nur im Datenfenster sichtbar (zur Kontrolle, was der Indikator je Bar sieht)
