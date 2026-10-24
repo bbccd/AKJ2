@@ -1,5 +1,5 @@
 //@version=6
-indicator("AKJ2.0 – Trend & Setup Detector", shorttitle = "AKJ2.0", overlay = true)
+indicator("AKJ2.0 – Trend & Setup Detector", shorttitle = "AKJ2.0", overlay = true, max_labels_count = 500)
 
 // Zweck: Aktien schnell auf mögliche Setups scannen. Bewusst kein Trade-Management und
 // keine Entry-/Exit-Marker – das kommt später in die strategy()-Version.
@@ -15,7 +15,9 @@ G_TREND = "Trend"
 bbLen     = input.int(10, "BB Länge", minval = 1, group = G_TREND)
 bbMult    = input.float(1.0, "BB Standardabweichung", minval = 0.1, step = 0.1, group = G_TREND)
 showBB    = input.bool(true, "Bollinger-Bänder anzeigen", group = G_TREND)
-bgMode    = input.string("Trigger (W + D)", "Hintergrund", options = ["Trigger (W + D)", "Weekly-Trend", "Aus"], group = G_TREND, tooltip = "Trigger: im Daily-Chart grün nur, wenn Weekly und Daily beide Kauf sind (orange: beide Verkauf), sonst kein Hintergrund. Im Weekly-Chart zeigt er den Weekly-Trigger. Weekly-Trend: nur der Weekly-Trend wie im alten AKJ2.")
+bgLongCol  = input.color(#1FBFB840, "Farbe Long-Hintergrund", group = G_TREND, inline = "bgcol")
+bgShortCol = input.color(#F0629240, "Short", group = G_TREND, inline = "bgcol")
+bgMode    = input.string("Trigger (W + D)", "Hintergrund", options = ["Trigger (W + D)", "Weekly-Trend", "Aus"], group = G_TREND, tooltip = "Trigger: im Daily-Chart nur gefärbt, wenn Weekly und Daily beide Kauf (Long-Farbe) bzw. beide Verkauf (Short-Farbe) sind, sonst kein Hintergrund. Im Weekly-Chart zeigt er den Weekly-Trigger. Weekly-Trend: nur der Weekly-Trend wie im alten AKJ2.")
 
 G_SETUP = "Setup & Entry"
 enableLong  = input.bool(true, "Long", group = G_SETUP, inline = "dir")
@@ -33,7 +35,15 @@ showEarnBg   = input.bool(true, "Sperrfenster grau hinterlegen", group = G_EARN,
 hideNearEarn = input.bool(true, "Keine Signale im Sperrfenster", group = G_EARN)
 earnDays     = input.int(8, "Sperrfenster (Kalendertage vor Earnings)", minval = 0, maxval = 21, group = G_EARN)
 
-showTable = input.bool(false, "Status-Tabelle anzeigen", group = "Anzeige")
+G_SHOW = "Anzeige"
+sigSizeIn   = input.string("Normal", "Größe Signal-Marker", options = ["Klein", "Normal", "Groß"], group = G_SHOW)
+sigLongCol  = input.color(color.green, "Farbe Marker Long", group = G_SHOW, inline = "sigcol")
+sigShortCol = input.color(color.red, "Short", group = G_SHOW, inline = "sigcol")
+hlCurrent   = input.bool(true, "Aktuelles Setup hervorheben", group = G_SHOW, tooltip = "Besteht auf der jüngsten Kerze ein offenes Setup, wird der Hintergrund ab der ersten Signalkerze (max. 10 Kerzen) eingefärbt und rechts ein Label mit Entry und SL angezeigt. Aus = Darstellung wie alle anderen Setups.")
+hlLongCol   = input.color(#2979FF66, "Farbe aktuelles Setup Long", group = G_SHOW, inline = "hlcol")
+hlShortCol  = input.color(#AA00FF66, "Short", group = G_SHOW, inline = "hlcol")
+showTable   = input.bool(false, "Status-Tabelle anzeigen", group = G_SHOW)
+sigSize     = sigSizeIn == "Klein" ? size.small : sigSizeIn == "Normal" ? size.normal : size.large
 
 // ═══════════════════════════════════════════════════════════════════
 // FUNKTIONEN
@@ -162,8 +172,8 @@ plot(showBB ? lower : na, "BB Lower", color.new(color.red, 40), 1)
 
 bgLong  = bgMode == "Trigger (W + D)" ? longTrend  : bgMode == "Weekly-Trend" and weeklyState == 1
 bgShort = bgMode == "Trigger (W + D)" ? shortTrend : bgMode == "Weekly-Trend" and weeklyState == -1
-bgcolor(bgLong  ? color.new(color.green, 75)  : na, title = "Long-Trigger Zone")
-bgcolor(bgShort ? color.new(color.orange, 75) : na, title = "Short-Trigger Zone")
+bgcolor(bgLong  ? bgLongCol  : na, title = "Long-Trigger Zone")
+bgcolor(bgShort ? bgShortCol : na, title = "Short-Trigger Zone")
 
 // Earnings-Sperrfenster grau (über dem Trigger-Hintergrund).
 // Aktueller Termin: direkt. Vergangene Termine: rückwirkend per Offset (max. 16 Kerzen ≈ 21 Kalendertage).
@@ -196,10 +206,41 @@ showLvls = setupDir != 0 or evTrigDir != 0
 plot(showLvls ? entryLvl : na, "Entry (Stop-Order)", color.blue, 2, plot.style_linebr)
 plot(showLvls ? slLvl : na, "Stop-Loss", color.red, 1, plot.style_linebr)
 
-// Pfeil auf der Signalkerze (neues Setup oder nachgezogen): L = Long, S = Short
+// Marker auf der Signalkerze (neues Setup oder nachgezogen): gefülltes Label mit Spitze zur Kerze,
+// weißer fetter Text L = Long (unter der Kerze) / S = Short (darüber). Feste Größe unabhängig vom Zoom.
 sigBar = evNewSetup or evMoveSetup
-plotshape(sigBar and setupDir == 1,  "Signal Long",  shape.arrowup,   location.belowbar, color.green, text = "L", textcolor = color.green, size = size.normal)
-plotshape(sigBar and setupDir == -1, "Signal Short", shape.arrowdown, location.abovebar, color.red,   text = "S", textcolor = color.red,   size = size.normal)
+if sigBar and setupDir == 1
+    label.new(bar_index, low, "L", yloc = yloc.belowbar, style = label.style_label_up, color = sigLongCol, textcolor = color.white, size = sigSize, text_formatting = text.format_bold)
+if sigBar and setupDir == -1
+    label.new(bar_index, high, "S", yloc = yloc.abovebar, style = label.style_label_down, color = sigShortCol, textcolor = color.white, size = sigSize, text_formatting = text.format_bold)
+
+// ═══════════════════════════════════════════════════════════════════
+// DARSTELLUNG – Aktuelles Setup hervorheben (nur auf der jüngsten Kerze bekannt)
+// Hintergrund rückwirkend per Offset ab der ersten Signalkerze (max. 10 Kerzen) + Label rechts.
+// ═══════════════════════════════════════════════════════════════════
+curActive = hlCurrent and barstate.islast and setupDir != 0
+curCol    = setupDir == 1 ? hlLongCol : hlShortCol
+curSetupCol(int k) =>
+    curActive and bar_index - k >= setupStart ? curCol : na
+
+bgcolor(curSetupCol(0), offset = 0,  title = "Aktuelles Setup")
+bgcolor(curSetupCol(1), offset = -1, editable = false)
+bgcolor(curSetupCol(2), offset = -2, editable = false)
+bgcolor(curSetupCol(3), offset = -3, editable = false)
+bgcolor(curSetupCol(4), offset = -4, editable = false)
+bgcolor(curSetupCol(5), offset = -5, editable = false)
+bgcolor(curSetupCol(6), offset = -6, editable = false)
+bgcolor(curSetupCol(7), offset = -7, editable = false)
+bgcolor(curSetupCol(8), offset = -8, editable = false)
+bgcolor(curSetupCol(9), offset = -9, editable = false)
+
+var label curLbl = na
+if barstate.islast
+    label.delete(curLbl)
+    curLbl := na
+    if curActive
+        curTxt = (setupDir == 1 ? "LONG-SETUP" : "SHORT-SETUP") + "\nEntry " + str.tostring(entryLvl, format.mintick) + "\nSL " + str.tostring(slLvl, format.mintick)
+        curLbl := label.new(bar_index, entryLvl, curTxt, style = label.style_label_left, color = color.new(curCol, 0), textcolor = color.white, size = size.normal, text_formatting = text.format_bold)
 
 // Nur im Datenfenster sichtbar (zur Kontrolle, was der Indikator je Bar sieht)
 plot(weeklyState, "Trend Weekly (1 / -1)", display = display.data_window)

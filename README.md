@@ -11,9 +11,11 @@ Pine-Editor von TradingView kopieren → „Zum Chart hinzufügen“. Gedacht f�
 **Anzeige im Chart**
 
 - Bollinger-Bänder 10 / 1
-- Hintergrund: grün = Long-Trigger, orange = Short-Trigger
-- Pfeil mit **L** / **S** auf der Signalkerze
+- Hintergrund: türkis = Long-Trigger, pink = Short-Trigger (Farben einstellbar)
+- Marker **L** (grün, unter der Kerze) / **S** (rot, darüber) auf der Signalkerze
 - Blaue Linie = Entry (Stop-Order), rote Linie = Stop-Loss, solange das Setup offen ist
+- **Aktuelles Setup** (offen auf der jüngsten Kerze): Hintergrund leuchtend blau (Long) bzw. violett (Short)
+  ab der ersten Signalkerze plus Label mit Entry und SL rechts der Kerze – per Setting abschaltbar
 - Grauer Hintergrund = Earnings-Sperrfenster (x Tage vorher bis einschließlich Earnings-Tag/-Woche).
   Den Earnings-Termin selbst zeigt TradingView mit seinem eigenen „E“-Symbol an.
 
@@ -65,11 +67,11 @@ flowchart TD
     K{"Kerze abgeschlossen?"} -- "nein" --> Ende
     K -- "ja" --> M{"Setup noch offen?"}
     M -- "ja" --> MV{"Neuer Downday (Long)<br/>bzw. Upday (Short)?"}
-    MV -- "ja" --> MVX["Entry und SL auf diese<br/>Kerze nachziehen, Pfeil"]
+    MV -- "ja" --> MVX["Entry und SL auf diese<br/>Kerze nachziehen, Marker"]
     MV -- "nein" --> Ende
     MVX --> Ende
     M -- "nein" --> NS{"Trigger aktiv, keine Earnings und<br/>Long: rote Kerze, %R ≤ −80<br/>Short: grüne Kerze, %R ≥ −20?"}
-    NS -- "ja" --> NSX["Neues Setup<br/>Long: Entry = Hoch + Puffer, SL = Tief − Puffer<br/>Short: Entry = Tief − Puffer, SL = Hoch + Puffer<br/>Pfeil L / S"]
+    NS -- "ja" --> NSX["Neues Setup<br/>Long: Entry = Hoch + Puffer, SL = Tief − Puffer<br/>Short: Entry = Tief − Puffer, SL = Hoch + Puffer<br/>Marker L / S"]
     NS -- "nein" --> Ende
     NSX --> Ende
 ```

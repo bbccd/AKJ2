@@ -9,9 +9,12 @@ und meldet Fehler zurück.
 - `akj_setup_indikator.pine` – aktueller Indikator „AKJ2.0 – Trend & Setup Detector“ (v6).
   Zweck: Aktien schnell auf Setups scannen. Bewusst schlank: kein Trade-Management, keine
   Entry-/Exit-Marker im Chart (Nutzer will keine Marker-Flut). Setup = blaue Entry- + rote SL-Linie
-  plus Pfeil auf der Signalkerze (grün „L“ unter der Kerze / rot „S“ darüber). Keine weiteren Marker.
+  plus Marker auf der Signalkerze: gefülltes Label mit Spitze zur Kerze, weißer fetter Text
+  (grün „L“ unter der Kerze / rot „S“ darüber; Stil wie die früheren UP/DOWN-Labels). Keine weiteren Marker.
+  Ausnahme: aktuelles (auf der jüngsten Kerze offenes) Setup wird hervorgehoben – Hintergrund blau/violett ab
+  erster Signalkerze (max. 10) + Label mit Entry/SL; per Setting „Aktuelles Setup hervorheben“ abschaltbar.
   Basiert auf dem früheren Nutzer-Indikator „AKJ2 – Weekly Trend Detector“ (v5); dessen Darstellung
-  (BB-Farben, grün/oranger Hintergrund) soll erhalten bleiben. Die senkrechten UP/DOWN-Linien wurden
+  (BB-Farben, Trigger-Hintergrund) soll erhalten bleiben; Farben jetzt türkis (Long) / pink (Short), da der Nutzer einen weiteren Indikator mit grün/roten Balken nutzt. Die senkrechten UP/DOWN-Linien wurden
   auf Wunsch entfernt (lassen sich nicht auf die Grenze zwischen zwei Kerzen legen; Hintergrund zeigt sie).
   Hintergrund zeigt standardmäßig den Trigger (beide TFs Kauf = grün, beide Verkauf = orange, sonst keiner);
   reiner Weekly-Hintergrund wie in AKJ2 per Setting wählbar.
