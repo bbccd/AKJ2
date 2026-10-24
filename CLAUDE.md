@@ -17,8 +17,13 @@ und meldet Fehler zurück.
   Basiert auf dem früheren Nutzer-Indikator „AKJ2 – Weekly Trend Detector“ (v5); dessen Darstellung
   (BB-Farben, Trigger-Hintergrund) soll erhalten bleiben; Farben jetzt türkis (Long) / pink (Short), da der Nutzer einen weiteren Indikator mit grün/roten Balken nutzt. Die senkrechten UP/DOWN-Linien wurden
   auf Wunsch entfernt (lassen sich nicht auf die Grenze zwischen zwei Kerzen legen; Hintergrund zeigt sie).
-  Hintergrund zeigt standardmäßig den Trigger (beide TFs Kauf = grün, beide Verkauf = orange, sonst keiner);
+  Hintergrund zeigt standardmäßig den Trigger (beide TFs Kauf = türkis, beide Verkauf = pink, sonst keiner);
   reiner Weekly-Hintergrund wie in AKJ2 per Setting wählbar.
+
+- Pine Screener (Nutzer hat Premium): Plots „Setup-Status (1 Long / -1 Short / 0)“, „Setup Entry“, „Setup SL“
+  nur im Datenfenster (display.data_window). Plot-Titel nicht ändern – sonst brechen gespeicherte Screener-Filter.
+  Im Screener ist earnings.future_time leer (getestet) → Earnings-Sperre greift dort nicht. Nutzer will KEINE
+  Schätzung des Termins; Einschränkung ist im README dokumentiert, Treffer werden im Chart geprüft.
 
 ## Strategie-Regeln (wie mit dem Nutzer geklärt)
 - BB 10 / 1, Williams %R Länge 4.

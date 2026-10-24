@@ -20,6 +20,24 @@ Pine-Editor von TradingView kopieren → „Zum Chart hinzufügen“. Gedacht f�
 - Grauer Hintergrund = Earnings-Sperrfenster (x Tage vorher bis einschließlich Earnings-Tag/-Woche).
   Den Earnings-Termin selbst zeigt TradingView mit seinem eigenen „E“-Symbol an.
 
+## Watchlist scannen (Pine Screener)
+
+Mit dem [Pine Screener](https://www.tradingview.com/pine-screener/) (ab Premium-Abo) lassen sich alle
+Ticker einer Watchlist finden, die aktuell ein gültiges Setup haben:
+
+1. Indikator im Pine-Editor speichern und zu den **Favoriten** hinzufügen (Stern).
+2. Pine Screener öffnen → Watchlist wählen → Indikator **AKJ2.0** wählen → Timeframe **1D**.
+3. Filter **„Setup-Status (1 Long / -1 Short / 0)“ = 1** (Long) bzw. **= -1** (Short) → Scannen.
+4. Optional **„Setup Entry“** und **„Setup SL“** als Spalten anzeigen.
+
+Der Setup-Status ist 0, sobald der Entry erreicht ist oder der Trigger wegfällt. Die Werte stehen auch
+im Datenfenster, im Chart wird dafür nichts gezeichnet.
+
+> **⚠ Der Screener berücksichtigt keine Earnings.** TradingView liefert im Pine Screener keinen
+> künftigen Earnings-Termin (`earnings.future_time` ist dort leer – erkennbar an der leeren Spalte
+> „Tage bis Earnings“). Die Earnings-Sperre greift deshalb nur im Chart. Treffer aus dem Screener
+> vor dem Handel im Chart auf das Sperrfenster (grauer Hintergrund) prüfen.
+
 ## Trendzustand je Timeframe
 
 Der Zustand wird für Weekly und Daily getrennt nach derselben Regel bestimmt. Er bleibt

@@ -266,6 +266,16 @@ plot(weeklyState, "Trend Weekly (1 / -1)", display = display.data_window)
 plot(dailyState, "Trend Daily (1 / -1)", display = display.data_window)
 plot(wrClosed, "Williams %R (abgeschl. Kerze)", display = display.data_window)
 
+// Für den Pine Screener (filtert nach Plot-Werten der jüngsten Kerze): offenes, gültiges Setup?
+// 1 = Long, -1 = Short, 0 = keins. Entry erreicht, Trigger weg oder Earnings-Sperre → 0.
+// ACHTUNG: Im Pine Screener ist earnings.future_time leer – dort greift die Earnings-Sperre NICHT.
+// Bewusst keine Schätzung des Termins (vom Nutzer so entschieden); Treffer im Chart prüfen.
+plot(setupDir, "Setup-Status (1 Long / -1 Short / 0)", display = display.data_window)
+plot(setupDir != 0 ? entryLvl : na, "Setup Entry", display = display.data_window)
+plot(setupDir != 0 ? slLvl : na, "Setup SL", display = display.data_window)
+// Diagnose: Tage bis zu den nächsten Earnings (leer = TradingView liefert keinen Termin).
+plot(daysToEarn, "Tage bis Earnings", display = display.data_window)
+
 // ═══════════════════════════════════════════════════════════════════
 // STATUS-TABELLE
 // ═══════════════════════════════════════════════════════════════════
