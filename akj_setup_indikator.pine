@@ -146,7 +146,9 @@ if setupDir != 0
 
 // 2) Neues Setup: Trigger aktiv, rote (Long) / grüne (Short) Kerze, %R-Close im Extrembereich.
 //    Nachziehen laut Guide: Solange das Setup offen ist, zieht jeder weitere Downday (Long)
-//    bzw. Upday (Short) Entry und SL auf die neue Kerze nach.
+//    bzw. Upday (Short) den Entry auf die neue Kerze nach.
+//    SL: liegt immer unter dem tiefsten Tief (Long) bzw. über dem höchsten Hoch (Short) seit der
+//    ersten Signalkerze – auch Kerzen ohne Signal ziehen ihn nach. Er wandert nie zurück in die Bewegung.
 longSig  = isDaily and inRange and enableLong  and longTrend  and close < open and wr <= wrLongLvl  and not earnBlock
 shortSig = isDaily and inRange and enableShort and shortTrend and close > open and wr >= wrShortLvl and not earnBlock
 moveSig  = setupDir == 1 ? close < open : setupDir == -1 ? close > open : false
@@ -154,14 +156,20 @@ moveSig  = setupDir == 1 ? close < open : setupDir == -1 ? close > open : false
 if barstate.isconfirmed and evTrigDir == 0
     newDir = setupDir != 0 ? (moveSig ? setupDir : 0) : longSig ? 1 : shortSig ? -1 : 0
     if newDir != 0
+        barSl = math.round_to_mintick(newDir == 1 ? low - priceBuffer(low, slTicks) : high + priceBuffer(high, slTicks))
         if setupDir == 0
             evNewSetup := true
             setupStart := bar_index
+            slLvl      := barSl
         else
             evMoveSetup := true
+            slLvl      := newDir == 1 ? math.min(slLvl, barSl) : math.max(slLvl, barSl)
         setupDir := newDir
         entryLvl := math.round_to_mintick(newDir == 1 ? high + priceBuffer(high, entryTicks) : low - priceBuffer(low, entryTicks))
-        slLvl    := math.round_to_mintick(newDir == 1 ? low - priceBuffer(low, slTicks) : high + priceBuffer(high, slTicks))
+    else if setupDir != 0
+        // Kerze ohne Signal (Long: grün, Short: rot): Entry bleibt, SL folgt einem neuen Extrem der Bewegung.
+        barSl = math.round_to_mintick(setupDir == 1 ? low - priceBuffer(low, slTicks) : high + priceBuffer(high, slTicks))
+        slLvl := setupDir == 1 ? math.min(slLvl, barSl) : math.max(slLvl, barSl)
 
 // ═══════════════════════════════════════════════════════════════════
 // DARSTELLUNG – Bollinger-Bänder & Trend

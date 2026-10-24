@@ -31,7 +31,9 @@ und meldet Fehler zurück.
 - Entry: Stop-Order Hoch + Puffer (Long) / Tief − Puffer (Short). Gaps ohne Auslösung ignorieren.
 - SL: Tief − Puffer (Long) / Hoch + Puffer (Short). Puffer in Ticks einstellbar (Default 2), optional ‰-Minimum.
 - Nachziehen laut Guide: solange Setup offen, zieht jeder weitere Downday (Long) / Upday (Short)
-  Entry und SL nach – ohne erneute %R-Prüfung. Setup endet, sobald Entry erreicht wird.
+  den Entry nach – ohne erneute %R-Prüfung. Setup endet, sobald Entry erreicht wird.
+- SL (vom Nutzer präzisiert): immer unter tiefstem Tief (Long) / über höchstem Hoch (Short) seit erster
+  Signalkerze; auch Kerzen ohne Signal (z. B. grüne bei Long) ziehen ihn nach. SL wandert nie zurück.
 - (Nur für spätere Strategie:) Ziel 1 bei CRV 1:1 → 50 % schließen, SL auf Einstand; Rest optional am BB-Mittelband nachziehen.
 - Earnings: Sperrfenster (8 Kalendertage vorher bis Earnings-Tag/-Woche) grau hinterlegen, in allen Charts;
   dort standardmäßig keine Signale. Eigener „E“-Marker entfernt (lag auf der Folgekerze) – TradingView zeigt E selbst.

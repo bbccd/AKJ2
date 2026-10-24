@@ -67,8 +67,9 @@ flowchart TD
     K{"Kerze abgeschlossen?"} -- "nein" --> Ende
     K -- "ja" --> M{"Setup noch offen?"}
     M -- "ja" --> MV{"Neuer Downday (Long)<br/>bzw. Upday (Short)?"}
-    MV -- "ja" --> MVX["Entry und SL auf diese<br/>Kerze nachziehen, Marker"]
-    MV -- "nein" --> Ende
+    MV -- "ja" --> MVX["Entry auf diese Kerze nachziehen,<br/>SL nur, wenn Tief tiefer (Long)<br/>bzw. Hoch höher (Short), Marker"]
+    MV -- "nein" --> SLX["Entry bleibt; SL nachziehen, wenn<br/>Tief tiefer (Long) bzw. Hoch höher (Short)"]
+    SLX --> Ende
     MVX --> Ende
     M -- "nein" --> NS{"Trigger aktiv, keine Earnings und<br/>Long: rote Kerze, %R ≤ −80<br/>Short: grüne Kerze, %R ≥ −20?"}
     NS -- "ja" --> NSX["Neues Setup<br/>Long: Entry = Hoch + Puffer, SL = Tief − Puffer<br/>Short: Entry = Tief − Puffer, SL = Hoch + Puffer<br/>Marker L / S"]
@@ -79,6 +80,8 @@ flowchart TD
 **Hinweise**
 
 - Puffer = 2 Ticks (einstellbar), optional mindestens x ‰ vom Kurs.
+- Der SL liegt immer unter dem tiefsten Tief (Long) bzw. über dem höchsten Hoch (Short) seit der
+  ersten Signalkerze – auch Kerzen ohne Signal ziehen ihn nach. Er wandert nie zurück in die Bewegung.
 - Gaps, die den Entry nicht erreichen, werden ignoriert. Das Setup bleibt dann offen.
 - Der Abbruch wird vor dem Entry geprüft, weil Trendwechsel, Earnings und Verfall schon zur
   Eröffnung bekannt sind. Man würde die Order dann vor Handelsbeginn löschen.
