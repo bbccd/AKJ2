@@ -30,7 +30,9 @@ und meldet Fehler zurück.
 - Nachziehen laut Guide: solange Setup offen, zieht jeder weitere Downday (Long) / Upday (Short)
   Entry und SL nach – ohne erneute %R-Prüfung. Setup endet, sobald Entry erreicht wird.
 - (Nur für spätere Strategie:) Ziel 1 bei CRV 1:1 → 50 % schließen, SL auf Einstand; Rest optional am BB-Mittelband nachziehen.
-- Earnings: anzeigen; Signale in den 8 Tagen davor standardmäßig ausblenden.
+- Earnings: Sperrfenster (8 Kalendertage vorher bis Earnings-Tag/-Woche) grau hinterlegen, in allen Charts;
+  dort standardmäßig keine Signale. Eigener „E“-Marker entfernt (lag auf der Folgekerze) – TradingView zeigt E selbst.
+  Vergangene Fenster per bgcolor-Offset rückwirkend; bei Zahlen nach Börsenschluss ist der Folgetag mit grau.
 - Risiko: 0,5–1 % (normal) bzw. 1–2 % (stark) des max. akzeptierten Depot-Drawdowns pro Trade.
 
 ## Offene Punkte / Refinement

@@ -1,5 +1,5 @@
 //@version=6
-indicator("AKJ2.0 – Trend & Setup Detector", shorttitle = "AKJ2.0", overlay = true, max_labels_count = 500)
+indicator("AKJ2.0 – Trend & Setup Detector", shorttitle = "AKJ2.0", overlay = true)
 
 // Zweck: Aktien schnell auf mögliche Setups scannen. Bewusst kein Trade-Management und
 // keine Entry-/Exit-Marker – das kommt später in die strategy()-Version.
@@ -29,9 +29,9 @@ bufPermille = input.float(0.0, "Mindest-Puffer (‰ vom Kurs, 0 = aus)", minval 
 expiryBars  = input.int(0, "Setup verfällt nach X Bars (0 = nie)", minval = 0, group = G_SETUP, tooltip = "Platzhalter fürs Refinement. Gezählt ab dem ersten Setup-Bar.")
 
 G_EARN = "Earnings"
-showEarn     = input.bool(true, "Earnings anzeigen", group = G_EARN)
-hideNearEarn = input.bool(true, "Signale vor Earnings ausblenden", group = G_EARN)
-earnDays     = input.int(8, "Sperrfenster (Kalendertage vor Earnings)", minval = 0, group = G_EARN)
+showEarnBg   = input.bool(true, "Sperrfenster grau hinterlegen", group = G_EARN, tooltip = "Grauer Hintergrund vom Beginn des Sperrfensters bis einschließlich Earnings-Tag bzw. -Woche. Vergangene Termine: TradingView liefert sie bei Veröffentlichung nach Börsenschluss erst am Folgetag – dann ist dieser Tag mit grau.")
+hideNearEarn = input.bool(true, "Keine Signale im Sperrfenster", group = G_EARN)
+earnDays     = input.int(8, "Sperrfenster (Kalendertage vor Earnings)", minval = 0, maxval = 21, group = G_EARN)
 
 showTable = input.bool(false, "Status-Tabelle anzeigen", group = "Anzeige")
 
@@ -93,11 +93,21 @@ shortTrend = isDaily ? weeklyState == -1 and dailyState == -1 : weeklyState == -
 // ═══════════════════════════════════════════════════════════════════
 // EARNINGS
 // ═══════════════════════════════════════════════════════════════════
+DAY_MS     = 86400000
+earnWinMs  = earnDays * DAY_MS
 nextEarn   = earnings.future_time
-daysToEarn = na(nextEarn) ? na : (nextEarn - time) / 86400000.0
-earnSoon   = not na(daysToEarn) and daysToEarn >= 0 and daysToEarn <= earnDays
+daysToEarn = na(nextEarn) ? na : (nextEarn - time) / DAY_MS
+// Kerze liegt im Sperrfenster [Earnings − x Tage, Earnings], wenn sie es zeitlich berührt (Daily wie Weekly).
+earnSoon   = not na(nextEarn) and time_close > nextEarn - earnWinMs and time <= nextEarn
 earnBlock  = hideNearEarn and earnSoon
+// Vergangene Earnings: Kerze, auf der TradingView die neuen Zahlen liefert.
 pastEarn   = request.earnings(syminfo.tickerid, earnings.actual, gaps = barmerge.gaps_on, lookahead = barmerge.lookahead_on, ignore_invalid_symbol = true)
+earnBar    = not na(pastEarn)
+
+// Farbe für das Sperrfenster vergangener Earnings, rückwirkend k Kerzen vor der Earnings-Kerze.
+EARN_COL = color.new(color.gray, 55)
+pastEarnCol(int k) =>
+    showEarnBg and earnBar and time_close[k] > time - earnWinMs ? EARN_COL : na
 
 // ═══════════════════════════════════════════════════════════════════
 // SETUP-LOGIK
@@ -155,6 +165,26 @@ bgShort = bgMode == "Trigger (W + D)" ? shortTrend : bgMode == "Weekly-Trend" an
 bgcolor(bgLong  ? color.new(color.green, 75)  : na, title = "Long-Trigger Zone")
 bgcolor(bgShort ? color.new(color.orange, 75) : na, title = "Short-Trigger Zone")
 
+// Earnings-Sperrfenster grau (über dem Trigger-Hintergrund).
+// Aktueller Termin: direkt. Vergangene Termine: rückwirkend per Offset (max. 16 Kerzen ≈ 21 Kalendertage).
+bgcolor(showEarnBg and earnSoon ? EARN_COL : na, title = "Earnings-Sperrfenster")
+bgcolor(pastEarnCol(0),  offset = 0,   editable = false)
+bgcolor(pastEarnCol(1),  offset = -1,  editable = false)
+bgcolor(pastEarnCol(2),  offset = -2,  editable = false)
+bgcolor(pastEarnCol(3),  offset = -3,  editable = false)
+bgcolor(pastEarnCol(4),  offset = -4,  editable = false)
+bgcolor(pastEarnCol(5),  offset = -5,  editable = false)
+bgcolor(pastEarnCol(6),  offset = -6,  editable = false)
+bgcolor(pastEarnCol(7),  offset = -7,  editable = false)
+bgcolor(pastEarnCol(8),  offset = -8,  editable = false)
+bgcolor(pastEarnCol(9),  offset = -9,  editable = false)
+bgcolor(pastEarnCol(10), offset = -10, editable = false)
+bgcolor(pastEarnCol(11), offset = -11, editable = false)
+bgcolor(pastEarnCol(12), offset = -12, editable = false)
+bgcolor(pastEarnCol(13), offset = -13, editable = false)
+bgcolor(pastEarnCol(14), offset = -14, editable = false)
+bgcolor(pastEarnCol(15), offset = -15, editable = false)
+
 // Weekly-Trendwechsel (nur für Alerts; im Chart zeigt der Hintergrund die Grenze)
 weeklyUpEdge   = weeklyState == 1  and weeklyState[1] != 1
 weeklyDownEdge = weeklyState == -1 and weeklyState[1] != -1
@@ -171,18 +201,10 @@ sigBar = evNewSetup or evMoveSetup
 plotshape(sigBar and setupDir == 1,  "Signal Long",  shape.arrowup,   location.belowbar, color.green, text = "L", textcolor = color.green, size = size.normal)
 plotshape(sigBar and setupDir == -1, "Signal Short", shape.arrowdown, location.abovebar, color.red,   text = "S", textcolor = color.red,   size = size.normal)
 
-plotshape(showEarn and not na(pastEarn), "Earnings", shape.diamond, location.bottom, color.orange, size = size.tiny, text = "E")
-
 // Nur im Datenfenster sichtbar (zur Kontrolle, was der Indikator je Bar sieht)
 plot(weeklyState, "Trend Weekly (1 / -1)", display = display.data_window)
 plot(dailyState, "Trend Daily (1 / -1)", display = display.data_window)
 plot(wrClosed, "Williams %R (abgeschl. Kerze)", display = display.data_window)
-
-// Nächste Earnings als Marke in der Zukunft
-var label earnLbl = na
-if barstate.islast and showEarn and not na(nextEarn)
-    label.delete(earnLbl)
-    earnLbl := label.new(int(nextEarn), high, "Earnings\n" + str.format_time(int(nextEarn), "dd.MM.yyyy", syminfo.timezone), xloc = xloc.bar_time, style = label.style_label_down, color = color.orange, textcolor = color.black, size = size.small)
 
 // ═══════════════════════════════════════════════════════════════════
 // STATUS-TABELLE

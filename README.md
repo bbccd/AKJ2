@@ -14,7 +14,8 @@ Pine-Editor von TradingView kopieren → „Zum Chart hinzufügen“. Gedacht f�
 - Hintergrund: grün = Long-Trigger, orange = Short-Trigger
 - Pfeil mit **L** / **S** auf der Signalkerze
 - Blaue Linie = Entry (Stop-Order), rote Linie = Stop-Loss, solange das Setup offen ist
-- **E** = vergangene Earnings, Label = nächster Earnings-Termin
+- Grauer Hintergrund = Earnings-Sperrfenster (x Tage vorher bis einschließlich Earnings-Tag/-Woche).
+  Den Earnings-Termin selbst zeigt TradingView mit seinem eigenen „E“-Symbol an.
 
 ## Trendzustand je Timeframe
 
