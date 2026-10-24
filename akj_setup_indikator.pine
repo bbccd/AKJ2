@@ -77,11 +77,10 @@ inRange  = time >= startDate and time <= endDate
 [basis, upper, lower] = ta.bb(close, bbLen, bbMult)
 wr = ta.wpr(wrLen)
 
-// Nur abgeschlossene Kerzen erzeugen Trigger/Signale: Auf der noch laufenden Kerze gilt
-// der Stand der letzten abgeschlossenen Kerze (historische Bars sind immer abgeschlossen).
-chartStateLive = bbTrendState(bbLen, bbMult)
-chartState     = barstate.isconfirmed ? chartStateLive : chartStateLive[1]
-wrClosed       = barstate.isconfirmed ? wr : wr[1]
+// Der Trigger steht erst mit dem Close der Trigger-Kerze fest. Das Regime gilt deshalb ab der
+// Kerze DANACH (Grenze zwischen Trigger-Kerze und Folgekerze) – auch auf der laufenden Kerze.
+chartState = bbTrendState(bbLen, bbMult)[1]
+wrClosed   = barstate.isconfirmed ? wr : wr[1]
 // Weekly im Daily-Chart ohne Repainting: nur abgeschlossene Wochen zählen.
 wReqState  = request.security(syminfo.tickerid, "W", bbTrendState(bbLen, bbMult)[1], lookahead = barmerge.lookahead_on)
 
@@ -115,16 +114,16 @@ bool evNewSetup  = false
 bool evMoveSetup = false
 int  evTrigDir   = 0         // Richtung des Setups, dessen Entry auf diesem Bar erreicht wurde
 
-// 1) Offenes Setup: Entry erreicht? Gaps ohne Auslösung zählen nicht.
-//    Sonst Abbruch, wenn der Trigger wegfällt, Earnings anstehen oder das Setup verfällt.
+// 1) Offenes Setup: Zuerst Abbruch prüfen – Trigger weg, Earnings, Verfall stehen schon zur
+//    Eröffnung fest (dann würde man die Order vor Handelsbeginn löschen). Danach: Entry erreicht?
+//    Gaps ohne Auslösung zählen nicht.
 if setupDir != 0
-    if setupDir == 1 ? high >= entryLvl : low <= entryLvl
+    trendLost = setupDir == 1 ? not longTrend : not shortTrend
+    if trendLost or earnBlock or setupExpired(setupStart)
+        setupDir := 0
+    else if setupDir == 1 ? high >= entryLvl : low <= entryLvl
         evTrigDir := setupDir
         setupDir  := 0
-    else
-        trendLost = setupDir == 1 ? not longTrend : not shortTrend
-        if trendLost or earnBlock or setupExpired(setupStart)
-            setupDir := 0
 
 // 2) Neues Setup: Trigger aktiv, rote (Long) / grüne (Short) Kerze, %R-Close im Extrembereich.
 //    Nachziehen laut Guide: Solange das Setup offen ist, zieht jeder weitere Downday (Long)
