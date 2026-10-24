@@ -1,5 +1,5 @@
 //@version=6
-indicator("AKJ2.0 – Trend & Setup Detector", shorttitle = "AKJ2.0", overlay = true, max_labels_count = 500, max_lines_count = 500)
+indicator("AKJ2.0 – Trend & Setup Detector", shorttitle = "AKJ2.0", overlay = true, max_labels_count = 500)
 
 // Zweck: Aktien schnell auf mögliche Setups scannen. Bewusst kein Trade-Management und
 // keine Entry-/Exit-Marker – das kommt später in die strategy()-Version.
@@ -16,7 +16,6 @@ bbLen     = input.int(10, "BB Länge", minval = 1, group = G_TREND)
 bbMult    = input.float(1.0, "BB Standardabweichung", minval = 0.1, step = 0.1, group = G_TREND)
 showBB    = input.bool(true, "Bollinger-Bänder anzeigen", group = G_TREND)
 bgMode    = input.string("Trigger (W + D)", "Hintergrund", options = ["Trigger (W + D)", "Weekly-Trend", "Aus"], group = G_TREND, tooltip = "Trigger: im Daily-Chart grün nur, wenn Weekly und Daily beide Kauf sind (orange: beide Verkauf), sonst kein Hintergrund. Im Weekly-Chart zeigt er den Weekly-Trigger. Weekly-Trend: nur der Weekly-Trend wie im alten AKJ2.")
-showWLines = input.bool(true, "Weekly-Trendstart (Linie + Label)", group = G_TREND)
 
 G_SETUP = "Setup & Entry"
 enableLong  = input.bool(true, "Long", group = G_SETUP, inline = "dir")
@@ -156,17 +155,9 @@ bgShort = bgMode == "Trigger (W + D)" ? shortTrend : bgMode == "Weekly-Trend" an
 bgcolor(bgLong  ? color.new(color.green, 75)  : na, title = "Long-Trigger Zone")
 bgcolor(bgShort ? color.new(color.orange, 75) : na, title = "Short-Trigger Zone")
 
-// Trendstart nur beim Wechsel in den Zustand (Rising Edge)
+// Weekly-Trendwechsel (nur für Alerts; im Chart zeigt der Hintergrund die Grenze)
 weeklyUpEdge   = weeklyState == 1  and weeklyState[1] != 1
 weeklyDownEdge = weeklyState == -1 and weeklyState[1] != -1
-
-if showWLines and inRange and weeklyUpEdge
-    line.new(bar_index, low, bar_index, high, color = color.green, width = 2, extend = extend.both)
-    label.new(bar_index, high, "UP", color = color.green, textcolor = color.white, size = size.small, style = label.style_label_down)
-
-if showWLines and inRange and weeklyDownEdge
-    line.new(bar_index, low, bar_index, high, color = color.red, width = 2, extend = extend.both)
-    label.new(bar_index, low, "DOWN", color = color.red, textcolor = color.white, size = size.small, style = label.style_label_up)
 
 // ═══════════════════════════════════════════════════════════════════
 // DARSTELLUNG – Setup (nur Linien, inkl. des Bars, auf dem der Entry erreicht wird)

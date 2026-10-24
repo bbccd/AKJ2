@@ -12,7 +12,6 @@ Pine-Editor von TradingView kopieren → „Zum Chart hinzufügen“. Gedacht f�
 
 - Bollinger-Bänder 10 / 1
 - Hintergrund: grün = Long-Trigger, orange = Short-Trigger
-- Senkrechte Linie mit UP/DOWN = Beginn eines neuen Weekly-Trends
 - Pfeil mit **L** / **S** auf der Signalkerze
 - Blaue Linie = Entry (Stop-Order), rote Linie = Stop-Loss, solange das Setup offen ist
 - **E** = vergangene Earnings, Label = nächster Earnings-Termin
@@ -38,7 +37,7 @@ stateDiagram-v2
 flowchart TD
     Start(["Neue Kerze"]) --> TF{"Chart-Timeframe?"}
     TF -- "Weekly" --> W1["Weekly-Zustand bis Vorwoche"]
-    W1 --> W2["Hintergrund und UP/DOWN-Linie<br/>nach Weekly-Zustand"]
+    W1 --> W2["Hintergrund nach<br/>Weekly-Zustand"]
     W2 --> Ende(["Fertig"])
     TF -- "anderer" --> X["Nur Bollinger-Bänder"]
     X --> Ende

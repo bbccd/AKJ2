@@ -11,7 +11,8 @@ und meldet Fehler zurück.
   Entry-/Exit-Marker im Chart (Nutzer will keine Marker-Flut). Setup = blaue Entry- + rote SL-Linie
   plus Pfeil auf der Signalkerze (grün „L“ unter der Kerze / rot „S“ darüber). Keine weiteren Marker.
   Basiert auf dem früheren Nutzer-Indikator „AKJ2 – Weekly Trend Detector“ (v5); dessen Darstellung
-  (BB-Farben, grün/oranger Hintergrund, senkrechte UP/DOWN-Linien) soll erhalten bleiben.
+  (BB-Farben, grün/oranger Hintergrund) soll erhalten bleiben. Die senkrechten UP/DOWN-Linien wurden
+  auf Wunsch entfernt (lassen sich nicht auf die Grenze zwischen zwei Kerzen legen; Hintergrund zeigt sie).
   Hintergrund zeigt standardmäßig den Trigger (beide TFs Kauf = grün, beide Verkauf = orange, sonst keiner);
   reiner Weekly-Hintergrund wie in AKJ2 per Setting wählbar.
 
