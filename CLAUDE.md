@@ -50,4 +50,6 @@ und meldet Fehler zurück.
 - Setup-Verfall: laut PDF keiner, in der Praxis aber gewünscht → Hook `setupExpired()` + Input vorhanden (Default aus).
 - Puffer abhängig vom Kurs (z. B. „mind. 2 Ticks und mind. x ‰“) verfeinern.
 - Earnings-Filter wirkt nur auf aktuelle Signale (TradingView liefert nur das nächste Datum) – für Backtest lösen.
+  Folge: Nach den Earnings erscheinen beim Neuladen Setups aus dem ehemaligen Fenster. Vom Nutzer als
+  akzeptabel/hilfreich bewertet (live war die Sperre aktiv); im README dokumentiert.
 - Später: `strategy()`-Version für Backtests, Positionsgröße aus Risiko-Regeln.

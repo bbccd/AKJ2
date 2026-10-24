@@ -105,3 +105,12 @@ flowchart TD
 - Der Abbruch wird vor dem Entry geprüft, weil Trendwechsel, Earnings und Verfall schon zur
   Eröffnung bekannt sind. Man würde die Order dann vor Handelsbeginn löschen.
 - Signale und Trigger entstehen nur aus abgeschlossenen Kerzen.
+- **Earnings-Sperre wirkt nur für den nächsten Termin.** TradingView liefert in Pine nur den nächsten
+  Earnings-Termin, nicht die vergangenen im Voraus. Vergangene Sperrfenster werden zwar grau
+  hinterlegt, sperren aber keine Signale. Deshalb gilt:
+  - *Vor* den Earnings: keine Setups im Sperrfenster (so, wie man es live sieht).
+  - *Nach* den Earnings: Beim Neuladen des Charts erscheinen Setups, Signalkerzen und Nachziehungen
+    aus dem ehemaligen Fenster (im grauen Bereich). Ein solches Setup kann danach als aktuell gültig
+    gelten, obwohl seine Signalkerze vor den Zahlen entstand – ob es nach der Earnings-Reaktion noch
+    trägt, ist eigenes Ermessen.
+  - Bei Zahlen nach Börsenschluss ist bei vergangenen Terminen auch der Folgetag grau.
