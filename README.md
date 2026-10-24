@@ -28,9 +28,10 @@ Ticker einer Watchlist finden, die aktuell ein gültiges Setup haben:
 1. Indikator im Pine-Editor speichern und zu den **Favoriten** hinzufügen (Stern).
 2. Pine Screener öffnen → Watchlist wählen → Indikator **AKJ2.0** wählen → Timeframe **1D**.
 3. Filter **„Setup-Status (1 Long / -1 Short / 0)“ = 1** (Long) bzw. **= -1** (Short) → Scannen.
-4. Optional **„Setup Entry“** und **„Setup SL“** als Spalten anzeigen.
+4. Optional **„Setup Entry“**, **„Setup SL“** und **„Setup Risiko (%)“** als Spalten anzeigen.
 
-Der Setup-Status ist 0, sobald der Entry erreicht ist oder der Trigger wegfällt. Die Werte stehen auch
+Der Setup-Status ist 0, sobald der Entry erreicht ist, der Trigger wegfällt oder das Risiko außerhalb
+des eingestellten Bereichs liegt. Die Werte stehen auch
 im Datenfenster, im Chart wird dafür nichts gezeichnet.
 
 > **⚠ Der Screener berücksichtigt keine Earnings.** TradingView liefert im Pine Screener keinen
@@ -105,6 +106,10 @@ flowchart TD
 - Der Abbruch wird vor dem Entry geprüft, weil Trendwechsel, Earnings und Verfall schon zur
   Eröffnung bekannt sind. Man würde die Order dann vor Handelsbeginn löschen.
 - Signale und Trigger entstehen nur aus abgeschlossenen Kerzen.
+- **Risiko-Filter** (Standard an, 2–7 %): Risiko = |Entry − SL| / Entry. Setups außerhalb des Bereichs
+  werden nicht angezeigt (Linien, Marker, Hervorhebung, Alerts) und im Screener nicht gelistet. Intern
+  läuft das Setup weiter, weil sich das Risiko beim Nachziehen ändert – es kann später wieder in den
+  Bereich laufen und erscheint dann. Das Label des aktuellen Setups zeigt das Risiko als „R: 2.3 %“.
 - **Earnings-Sperre wirkt nur für den nächsten Termin.** TradingView liefert in Pine nur den nächsten
   Earnings-Termin, nicht die vergangenen im Voraus. Vergangene Sperrfenster werden zwar grau
   hinterlegt, sperren aber keine Signale. Deshalb gilt:

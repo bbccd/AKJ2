@@ -29,6 +29,9 @@ entryTicks  = input.int(2, "Entry-Puffer (Ticks)", minval = 0, group = G_SETUP)
 slTicks     = input.int(2, "Stop-Loss-Puffer (Ticks)", minval = 0, group = G_SETUP)
 bufPermille = input.float(0.0, "Mindest-Puffer (‰ vom Kurs, 0 = aus)", minval = 0.0, step = 0.1, group = G_SETUP, tooltip = "Puffer = größerer Wert aus Ticks und Promille. Für teure Aktien gedacht.")
 expiryBars  = input.int(0, "Setup verfällt nach X Bars (0 = nie)", minval = 0, group = G_SETUP, tooltip = "Platzhalter fürs Refinement. Gezählt ab dem ersten Setup-Bar.")
+riskFilter  = input.bool(true, "Risiko-Filter", group = G_SETUP, tooltip = "Risiko = |Entry − SL| / Entry. Setups außerhalb des Bereichs werden nicht angezeigt (Linien, Marker, Hervorhebung, Alerts) und im Screener nicht gelistet. Zu klein: Gefahr, durch Volatilität ausgestoppt zu werden. Zu groß: Trade braucht zu lange.")
+riskMin     = input.float(2.0, "Risiko min. (%)", minval = 0.0, step = 0.1, group = G_SETUP, inline = "risk")
+riskMax     = input.float(7.0, "max. (%)", minval = 0.0, step = 0.1, group = G_SETUP, inline = "risk")
 
 G_EARN = "Earnings"
 showEarnBg   = input.bool(true, "Sperrfenster grau hinterlegen", group = G_EARN, tooltip = "Grauer Hintergrund vom Beginn des Sperrfensters bis einschließlich Earnings-Tag bzw. -Woche. Vergangene Termine: TradingView liefert sie bei Veröffentlichung nach Börsenschluss erst am Folgetag – dann ist dieser Tag mit grau.")
@@ -172,6 +175,12 @@ if barstate.isconfirmed and evTrigDir == 0
         barSl = math.round_to_mintick(setupDir == 1 ? low - priceBuffer(low, slTicks) : high + priceBuffer(high, slTicks))
         slLvl := setupDir == 1 ? math.min(slLvl, barSl) : math.max(slLvl, barSl)
 
+// 3) Risiko-Filter: prozentuales Risiko = |Entry − SL| / Entry. Filtert nur die Anzeige (Linien, Marker,
+//    Hervorhebung, Alerts, Screener) – das Setup läuft intern weiter, da sich das Risiko beim Nachziehen ändert.
+hasLvls  = setupDir != 0 or evTrigDir != 0
+riskPct  = hasLvls ? math.abs(entryLvl - slLvl) / entryLvl * 100 : na
+riskOk   = not riskFilter or (riskPct >= riskMin and riskPct <= riskMax)
+
 // ═══════════════════════════════════════════════════════════════════
 // DARSTELLUNG – Bollinger-Bänder & Trend
 // ═══════════════════════════════════════════════════════════════════
@@ -211,7 +220,7 @@ weeklyDownEdge = weeklyState == -1 and weeklyState[1] != -1
 // ═══════════════════════════════════════════════════════════════════
 // DARSTELLUNG – Setup (nur Linien, inkl. des Bars, auf dem der Entry erreicht wird)
 // ═══════════════════════════════════════════════════════════════════
-showLvls = setupDir != 0 or evTrigDir != 0
+showLvls = hasLvls and riskOk
 plot(showLvls ? entryLvl : na, "Entry (Stop-Order)", color.blue, 2, plot.style_linebr)
 plot(showLvls ? slLvl : na, "Stop-Loss", color.red, 1, plot.style_linebr)
 
@@ -220,7 +229,7 @@ plot(showLvls ? slLvl : na, "Stop-Loss", color.red, 1, plot.style_linebr)
 // Die Marker des jüngsten Setups werden gemerkt, um sie beim aktuellen Setup umzufärben.
 var array<label> lastMarks = array.new<label>()
 var int          marksDir  = 0
-sigBar = evNewSetup or evMoveSetup
+sigBar = (evNewSetup or evMoveSetup) and riskOk
 if evNewSetup
     array.clear(lastMarks)
     marksDir := setupDir
@@ -233,7 +242,7 @@ if sigBar and setupDir == -1
 // DARSTELLUNG – Aktuelles Setup hervorheben (nur auf der jüngsten Kerze bekannt)
 // Hintergrund rückwirkend per Offset ab der ersten Signalkerze (max. 10 Kerzen) + Label rechts.
 // ═══════════════════════════════════════════════════════════════════
-curActive = hlCurrent and barstate.islast and setupDir != 0
+curActive = hlCurrent and barstate.islast and setupDir != 0 and riskOk
 curCol    = setupDir == 1 ? hlLongCol : hlShortCol
 curSetupCol(int k) =>
     curActive and bar_index - k >= setupStart ? curCol : na
@@ -258,7 +267,7 @@ if barstate.islast
     label.delete(curLbl)
     curLbl := na
     if curActive
-        curTxt = (setupDir == 1 ? "LONG-SETUP" : "SHORT-SETUP") + "\nEntry " + str.tostring(entryLvl, format.mintick) + "\nSL " + str.tostring(slLvl, format.mintick)
+        curTxt = (setupDir == 1 ? "LONG-SETUP" : "SHORT-SETUP") + "\nEntry " + str.tostring(entryLvl, format.mintick) + "\nSL " + str.tostring(slLvl, format.mintick) + "\nR: " + str.tostring(riskPct, "0.0") + " %"
         curLbl := label.new(bar_index, entryLvl, curTxt, style = label.style_label_left, color = color.new(curCol, 0), textcolor = color.white, size = size.normal, text_formatting = text.format_bold)
 
 // Nur im Datenfenster sichtbar (zur Kontrolle, was der Indikator je Bar sieht)
@@ -267,12 +276,14 @@ plot(dailyState, "Trend Daily (1 / -1)", display = display.data_window)
 plot(wrClosed, "Williams %R (abgeschl. Kerze)", display = display.data_window)
 
 // Für den Pine Screener (filtert nach Plot-Werten der jüngsten Kerze): offenes, gültiges Setup?
-// 1 = Long, -1 = Short, 0 = keins. Entry erreicht, Trigger weg oder Earnings-Sperre → 0.
+// 1 = Long, -1 = Short, 0 = keins. Entry erreicht, Trigger weg, Earnings-Sperre oder Risiko außerhalb → 0.
 // ACHTUNG: Im Pine Screener ist earnings.future_time leer – dort greift die Earnings-Sperre NICHT.
 // Bewusst keine Schätzung des Termins (vom Nutzer so entschieden); Treffer im Chart prüfen.
-plot(setupDir, "Setup-Status (1 Long / -1 Short / 0)", display = display.data_window)
-plot(setupDir != 0 ? entryLvl : na, "Setup Entry", display = display.data_window)
-plot(setupDir != 0 ? slLvl : na, "Setup SL", display = display.data_window)
+scrActive = setupDir != 0 and riskOk
+plot(scrActive ? setupDir : 0, "Setup-Status (1 Long / -1 Short / 0)", display = display.data_window)
+plot(scrActive ? entryLvl : na, "Setup Entry", display = display.data_window)
+plot(scrActive ? slLvl : na, "Setup SL", display = display.data_window)
+plot(setupDir != 0 ? riskPct : na, "Setup Risiko (%)", display = display.data_window)
 // Diagnose: Tage bis zu den nächsten Earnings (leer = TradingView liefert keinen Termin).
 plot(daysToEarn, "Tage bis Earnings", display = display.data_window)
 
@@ -281,8 +292,8 @@ plot(daysToEarn, "Tage bis Earnings", display = display.data_window)
 // ═══════════════════════════════════════════════════════════════════
 var table tbl = table.new(position.top_right, 2, 7, bgcolor = color.new(color.gray, 85), border_width = 1)
 if showTable and barstate.islast
-    statusTxt = setupDir == 1 ? "Long-Setup" : setupDir == -1 ? "Short-Setup" : "Kein Setup"
-    lvlTxt    = setupDir != 0 ? str.tostring(entryLvl, format.mintick) + " / SL " + str.tostring(slLvl, format.mintick) : "–"
+    statusTxt = setupDir == 0 ? "Kein Setup" : (setupDir == 1 ? "Long-Setup" : "Short-Setup") + (riskOk ? "" : " (Risiko außerhalb)")
+    lvlTxt    = setupDir != 0 ? str.tostring(entryLvl, format.mintick) + " / SL " + str.tostring(slLvl, format.mintick) + " / R " + str.tostring(riskPct, "0.0") + " %" : "–"
     earnTxt   = na(nextEarn) ? "keine Daten" : str.format_time(int(nextEarn), "dd.MM.yyyy", syminfo.timezone) + " (" + str.tostring(math.ceil(daysToEarn)) + " T)"
     table.cell(tbl, 0, 0, "Trend W", text_color = chart.fg_color, text_size = size.small)
     table.cell(tbl, 1, 0, trendTxt(weeklyState), text_color = trendCol(weeklyState), text_size = size.small)
@@ -305,7 +316,7 @@ if showTable and barstate.islast
 // ═══════════════════════════════════════════════════════════════════
 alertcondition(weeklyUpEdge, "Weekly UP", "{{ticker}}: Weekly-Trend UP")
 alertcondition(weeklyDownEdge, "Weekly DOWN", "{{ticker}}: Weekly-Trend DOWN")
-alertcondition((evNewSetup or evMoveSetup) and setupDir == 1, "Long-Setup", "{{ticker}}: Long-Setup – Stop-Buy setzen/nachziehen")
-alertcondition((evNewSetup or evMoveSetup) and setupDir == -1, "Short-Setup", "{{ticker}}: Short-Setup – Stop-Sell setzen/nachziehen")
-alertcondition(evTrigDir == 1, "Long-Entry erreicht", "{{ticker}}: Long-Entry erreicht")
-alertcondition(evTrigDir == -1, "Short-Entry erreicht", "{{ticker}}: Short-Entry erreicht")
+alertcondition(sigBar and setupDir == 1, "Long-Setup", "{{ticker}}: Long-Setup – Stop-Buy setzen/nachziehen")
+alertcondition(sigBar and setupDir == -1, "Short-Setup", "{{ticker}}: Short-Setup – Stop-Sell setzen/nachziehen")
+alertcondition(evTrigDir == 1 and riskOk, "Long-Entry erreicht", "{{ticker}}: Long-Entry erreicht")
+alertcondition(evTrigDir == -1 and riskOk, "Short-Entry erreicht", "{{ticker}}: Short-Entry erreicht")

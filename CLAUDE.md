@@ -44,6 +44,9 @@ und meldet Fehler zurück.
 - Earnings: Sperrfenster (8 Kalendertage vorher bis Earnings-Tag/-Woche) grau hinterlegen, in allen Charts;
   dort standardmäßig keine Signale. Eigener „E“-Marker entfernt (lag auf der Folgekerze) – TradingView zeigt E selbst.
   Vergangene Fenster per bgcolor-Offset rückwirkend; bei Zahlen nach Börsenschluss ist der Folgetag mit grau.
+- Risiko-Filter (Setting, Default an): Risiko % = |Entry − SL| / Entry, nur Setups mit 2–7 % anzeigen/im Screener.
+  Filtert nur die Anzeige (Linien, Marker, Hervorhebung, Alerts, Screener), Setup-Zustand läuft intern weiter.
+  Label des aktuellen Setups zeigt unten „R: 2.3 %“ (eine Nachkommastelle).
 - Risiko: 0,5–1 % (normal) bzw. 1–2 % (stark) des max. akzeptierten Depot-Drawdowns pro Trade.
 
 ## Offene Punkte / Refinement
