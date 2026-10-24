@@ -37,13 +37,14 @@ earnDays     = input.int(8, "Sperrfenster (Kalendertage vor Earnings)", minval =
 
 G_SHOW = "Anzeige"
 sigSizeIn   = input.string("Normal", "Größe Signal-Marker", options = ["Klein", "Normal", "Groß"], group = G_SHOW)
-sigLongCol  = input.color(color.green, "Farbe Marker Long", group = G_SHOW, inline = "sigcol")
-sigShortCol = input.color(color.red, "Short", group = G_SHOW, inline = "sigcol")
 hlCurrent   = input.bool(true, "Aktuelles Setup hervorheben", group = G_SHOW, tooltip = "Besteht auf der jüngsten Kerze ein offenes Setup, wird der Hintergrund ab der ersten Signalkerze (max. 10 Kerzen) eingefärbt und rechts ein Label mit Entry und SL angezeigt. Aus = Darstellung wie alle anderen Setups.")
 hlLongCol   = input.color(#2979FF66, "Farbe aktuelles Setup Long", group = G_SHOW, inline = "hlcol")
 hlShortCol  = input.color(#AA00FF66, "Short", group = G_SHOW, inline = "hlcol")
 showTable   = input.bool(false, "Status-Tabelle anzeigen", group = G_SHOW)
 sigSize     = sigSizeIn == "Klein" ? size.small : sigSizeIn == "Normal" ? size.normal : size.large
+// Marker-Farben = Hintergrundfarben, deckend (Verwandtschaft sichtbar)
+sigLongCol  = color.new(bgLongCol, 0)
+sigShortCol = color.new(bgShortCol, 0)
 
 // ═══════════════════════════════════════════════════════════════════
 // FUNKTIONEN
@@ -216,11 +217,17 @@ plot(showLvls ? slLvl : na, "Stop-Loss", color.red, 1, plot.style_linebr)
 
 // Marker auf der Signalkerze (neues Setup oder nachgezogen): gefülltes Label mit Spitze zur Kerze,
 // weißer fetter Text L = Long (unter der Kerze) / S = Short (darüber). Feste Größe unabhängig vom Zoom.
+// Die Marker des jüngsten Setups werden gemerkt, um sie beim aktuellen Setup umzufärben.
+var array<label> lastMarks = array.new<label>()
+var int          marksDir  = 0
 sigBar = evNewSetup or evMoveSetup
+if evNewSetup
+    array.clear(lastMarks)
+    marksDir := setupDir
 if sigBar and setupDir == 1
-    label.new(bar_index, low, "L", yloc = yloc.belowbar, style = label.style_label_up, color = sigLongCol, textcolor = color.white, size = sigSize, text_formatting = text.format_bold)
+    array.push(lastMarks, label.new(bar_index, low, "L", yloc = yloc.belowbar, style = label.style_label_up, color = sigLongCol, textcolor = color.white, size = sigSize, text_formatting = text.format_bold))
 if sigBar and setupDir == -1
-    label.new(bar_index, high, "S", yloc = yloc.abovebar, style = label.style_label_down, color = sigShortCol, textcolor = color.white, size = sigSize, text_formatting = text.format_bold)
+    array.push(lastMarks, label.new(bar_index, high, "S", yloc = yloc.abovebar, style = label.style_label_down, color = sigShortCol, textcolor = color.white, size = sigSize, text_formatting = text.format_bold))
 
 // ═══════════════════════════════════════════════════════════════════
 // DARSTELLUNG – Aktuelles Setup hervorheben (nur auf der jüngsten Kerze bekannt)
@@ -244,6 +251,10 @@ bgcolor(curSetupCol(9), offset = -9, editable = false)
 
 var label curLbl = na
 if barstate.islast
+    // Marker des jüngsten Setups: Farbe der Hervorhebung, solange es aktuell ist, sonst normal.
+    markCol = curActive ? color.new(curCol, 0) : marksDir == 1 ? sigLongCol : sigShortCol
+    for m in lastMarks
+        label.set_color(m, markCol)
     label.delete(curLbl)
     curLbl := na
     if curActive

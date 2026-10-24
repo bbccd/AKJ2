@@ -10,7 +10,8 @@ und meldet Fehler zurück.
   Zweck: Aktien schnell auf Setups scannen. Bewusst schlank: kein Trade-Management, keine
   Entry-/Exit-Marker im Chart (Nutzer will keine Marker-Flut). Setup = blaue Entry- + rote SL-Linie
   plus Marker auf der Signalkerze: gefülltes Label mit Spitze zur Kerze, weißer fetter Text
-  (grün „L“ unter der Kerze / rot „S“ darüber; Stil wie die früheren UP/DOWN-Labels). Keine weiteren Marker.
+  („L“ unter der Kerze / „S“ darüber; Stil wie die früheren UP/DOWN-Labels). Keine weiteren Marker.
+  Marker-Farbe = Trigger-Hintergrundfarbe (deckend); Marker des aktuellen Setups = Hervorhebungsfarbe.
   Ausnahme: aktuelles (auf der jüngsten Kerze offenes) Setup wird hervorgehoben – Hintergrund blau/violett ab
   erster Signalkerze (max. 10) + Label mit Entry/SL; per Setting „Aktuelles Setup hervorheben“ abschaltbar.
   Basiert auf dem früheren Nutzer-Indikator „AKJ2 – Weekly Trend Detector“ (v5); dessen Darstellung

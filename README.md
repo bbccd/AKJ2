@@ -12,7 +12,8 @@ Pine-Editor von TradingView kopieren → „Zum Chart hinzufügen“. Gedacht f�
 
 - Bollinger-Bänder 10 / 1
 - Hintergrund: türkis = Long-Trigger, pink = Short-Trigger (Farben einstellbar)
-- Marker **L** (grün, unter der Kerze) / **S** (rot, darüber) auf der Signalkerze
+- Marker **L** (unter der Kerze) / **S** (darüber) auf der Signalkerze, in der Farbe des Trigger-Hintergrunds;
+  beim aktuellen Setup in der Farbe der Hervorhebung
 - Blaue Linie = Entry (Stop-Order), rote Linie = Stop-Loss, solange das Setup offen ist
 - **Aktuelles Setup** (offen auf der jüngsten Kerze): Hintergrund leuchtend blau (Long) bzw. violett (Short)
   ab der ersten Signalkerze plus Label mit Entry und SL rechts der Kerze – per Setting abschaltbar
