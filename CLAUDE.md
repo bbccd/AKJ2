@@ -50,8 +50,12 @@ und meldet Fehler zurück.
 ## Strategie-Regeln (wie mit dem Nutzer geklärt)
 - BB 10 / 1, Williams %R Länge 4.
 - Trend: 2x Close > oberes BB = Kauf, 2x Close < unteres BB = Verkauf. Gilt, bis der Gegentrigger kommt.
-- Timeframes: nur Weekly + Daily, der Monatschart spielt keine Rolle (vom Nutzer ausdrücklich so gewollt).
-  Daily-Chart: Trigger = Weekly UND Daily, Setups. Weekly-Chart: nur Weekly-Trigger, keine Setups.
+- Spielweise (Setting, Default „W + D“ – muss sich exakt wie vor Einführung der Spielweisen verhalten!):
+  „W + D“: Daily-Chart = Trigger W UND D + Setups; Weekly-Chart nur Weekly-Trigger; Monat spielt hier keine Rolle.
+  „M + W“: Weekly-Chart = Trigger M UND W + Setups (gleiche Regeln eine Ebene höher); Daily-Chart nichts.
+  Monthly-Chart: in beiden Spielweisen nur Monthly-Trigger-Hintergrund, KEIN Earnings-Grau (sonst 2 von 3 Monaten grau). Eigene Risiko-Grenzen (W+D 2–7 %,
+  M+W 3–12 %) und Earnings-Fenster (je 8 Tage) pro Spielweise. Ein Skript; für beide Spielweisen im selben
+  Chart den Indikator zweimal hinzufügen. Später evtl. „D + 4h“ (Logik noch unbekannt). Strategie: nur W + D.
 - Nur abgeschlossene Kerzen (Tag bzw. Woche) erzeugen Trigger und %R-Signale – keine Signale aus laufenden Kerzen.
   Regime gilt ab der Kerze NACH der Trigger-Kerze (Grenze zwischen beiden), in W und D.
 - Long-Setup: beide TFs Kauf, rote Kerze, %R-Close ≤ −80. Short spiegelbildlich (grüne Kerze, ≥ −20).

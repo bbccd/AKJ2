@@ -12,13 +12,14 @@ startDate = input.time(timestamp("2020-01-01"), "Startdatum", group = G_RANGE)
 endDate   = input.time(timestamp("2099-12-31"), "Enddatum", group = G_RANGE)
 
 G_TREND = "Trend"
+playMode  = input.string("W + D", "Spielweise", options = ["W + D", "M + W"], group = G_TREND, tooltip = "W + D: Weekly übergeordnet, Trade im Daily-Chart (Weekly-Chart zeigt nur den Weekly-Trigger). M + W: Monthly übergeordnet, Trade im Weekly-Chart. Das Monthly-Chart zeigt immer den Monthly-Trigger. Für beide Spielweisen im selben Chart den Indikator zweimal hinzufügen.")
 bbLen     = input.int(10, "BB Länge", minval = 1, group = G_TREND)
 bbMult    = input.float(1.0, "BB Standardabweichung", minval = 0.1, step = 0.1, group = G_TREND)
 showBB    = input.bool(true, "Bollinger-Bänder anzeigen", group = G_TREND, inline = "bb")
 bbWidth   = input.int(3, "Dicke", minval = 1, maxval = 4, group = G_TREND, inline = "bb")
 bgLongCol  = input.color(#1FBFB840, "Farbe Long-Hintergrund", group = G_TREND, inline = "bgcol")
 bgShortCol = input.color(#F0629240, "Short", group = G_TREND, inline = "bgcol")
-bgMode    = input.string("Trigger (W + D)", "Hintergrund", options = ["Trigger (W + D)", "Weekly-Trend", "Aus"], group = G_TREND, tooltip = "Trigger: im Daily-Chart nur gefärbt, wenn Weekly und Daily beide Kauf (Long-Farbe) bzw. beide Verkauf (Short-Farbe) sind, sonst kein Hintergrund. Im Weekly-Chart zeigt er den Weekly-Trigger. Weekly-Trend: nur der Weekly-Trend wie im alten AKJ2.")
+bgMode    = input.string("Trigger", "Hintergrund", options = ["Trigger", "Weekly-Trend", "Aus"], group = G_TREND, tooltip = "Trigger: im Trade-Chart (W + D: Daily, M + W: Weekly) nur gefärbt, wenn übergeordneter TF und Trade-TF beide Kauf (Long-Farbe) bzw. beide Verkauf (Short-Farbe) sind, sonst kein Hintergrund. Im Chart des übergeordneten TF (und im Monthly-Chart) zeigt er dessen Trigger. Weekly-Trend: nur der übergeordnete Trend (W bzw. M), wie im alten AKJ2.")
 
 G_SETUP = "Setup & Entry"
 enableLong  = input.bool(true, "Long", group = G_SETUP, inline = "dir")
@@ -31,13 +32,16 @@ slTicks     = input.int(2, "Stop-Loss-Puffer (Ticks)", minval = 0, group = G_SET
 bufPermille = input.float(0.0, "Mindest-Puffer (‰ vom Kurs, 0 = aus)", minval = 0.0, step = 0.1, group = G_SETUP, tooltip = "Puffer = größerer Wert aus Ticks und Promille. Für teure Aktien gedacht.")
 expiryBars  = input.int(0, "Setup verfällt nach X Bars (0 = nie)", minval = 0, group = G_SETUP, tooltip = "Platzhalter fürs Refinement. Gezählt ab dem ersten Setup-Bar.")
 riskFilter  = input.bool(true, "Risiko-Filter", group = G_SETUP, tooltip = "Risiko = |Entry − SL| / Entry. Setups außerhalb des Bereichs werden nicht angezeigt (Linien, Marker, Hervorhebung, Alerts) und im Screener nicht gelistet. Zu klein: Gefahr, durch Volatilität ausgestoppt zu werden. Zu groß: Trade braucht zu lange.")
-riskMin     = input.float(2.0, "Risiko min. (%)", minval = 0.0, step = 0.1, group = G_SETUP, inline = "risk")
-riskMax     = input.float(7.0, "max. (%)", minval = 0.0, step = 0.1, group = G_SETUP, inline = "risk")
+riskMinWD   = input.float(2.0, "Risiko W + D min. (%)", minval = 0.0, step = 0.1, group = G_SETUP, inline = "riskWD")
+riskMaxWD   = input.float(7.0, "max. (%)", minval = 0.0, step = 0.1, group = G_SETUP, inline = "riskWD")
+riskMinMW   = input.float(3.0, "Risiko M + W min. (%)", minval = 0.0, step = 0.1, group = G_SETUP, inline = "riskMW")
+riskMaxMW   = input.float(12.0, "max. (%)", minval = 0.0, step = 0.1, group = G_SETUP, inline = "riskMW")
 
 G_EARN = "Earnings"
 showEarnBg   = input.bool(true, "Sperrfenster grau hinterlegen", group = G_EARN, tooltip = "Grauer Hintergrund vom Beginn des Sperrfensters bis einschließlich Earnings-Tag bzw. -Woche. Vergangene Termine: TradingView liefert sie bei Veröffentlichung nach Börsenschluss erst am Folgetag – dann ist dieser Tag mit grau.")
 hideNearEarn = input.bool(true, "Keine Signale im Sperrfenster", group = G_EARN)
-earnDays     = input.int(8, "Sperrfenster (Kalendertage vor Earnings)", minval = 0, maxval = 21, group = G_EARN)
+earnDaysWD   = input.int(8, "Sperrfenster W + D (Kalendertage vor Earnings)", minval = 0, maxval = 21, group = G_EARN)
+earnDaysMW   = input.int(8, "Sperrfenster M + W (Kalendertage vor Earnings)", minval = 0, maxval = 21, group = G_EARN)
 
 // Farbverlauf kurz → lang wie im TradingView-„Moving Average Ribbon“: Gelb → Orange → Rot.
 G_MA = "Moving Averages"
@@ -142,14 +146,24 @@ trendTxt(int s) => s == 1 ? "UP ▲" : s == -1 ? "DOWN ▼" : "–"
 trendCol(int s) => s == 1 ? color.green : s == -1 ? color.red : color.gray
 
 // ═══════════════════════════════════════════════════════════════════
-// TIMEFRAMES: nur Weekly + Daily
-// Daily-Chart:  Trigger = Weekly UND Daily, Setups werden gesucht.
-// Weekly-Chart: Trigger = Weekly, keine Setups (Entscheidungen fallen im Daily).
+// TIMEFRAMES / SPIELWEISE
+// W + D (Default): Trade-Chart Daily (Trigger W UND D, Setups); Weekly-Chart nur Weekly-Trigger.
+// M + W:           Trade-Chart Weekly (Trigger M UND W, Setups); Daily-Chart nichts.
+// Monthly-Chart: in beiden Spielweisen nur der Monthly-Trigger, keine Setups.
 // ═══════════════════════════════════════════════════════════════════
-isDaily  = timeframe.isdaily and timeframe.multiplier == 1
-isWeekly = timeframe.isweekly and timeframe.multiplier == 1
-tfValid  = isDaily or isWeekly
-inRange  = time >= startDate and time <= endDate
+isMW       = playMode == "M + W"
+isDaily    = timeframe.isdaily and timeframe.multiplier == 1
+isWeekly   = timeframe.isweekly and timeframe.multiplier == 1
+isMonthly  = timeframe.ismonthly and timeframe.multiplier == 1
+htfTf      = isMW ? "M" : "W"                       // übergeordneter Timeframe
+ltfName    = isMW ? "W" : "D"                       // Trade-Timeframe (nur für Beschriftungen)
+tradeChart = isMW ? isWeekly : isDaily              // Chart, in dem Setups gesucht werden
+trigChart  = (not isMW and isWeekly) or isMonthly   // Chart, der nur einen Trigger zeigt
+tfValid    = tradeChart or trigChart
+riskMin    = isMW ? riskMinMW : riskMinWD
+riskMax    = isMW ? riskMaxMW : riskMaxWD
+earnDays   = isMW ? earnDaysMW : earnDaysWD
+inRange    = time >= startDate and time <= endDate
 
 // ═══════════════════════════════════════════════════════════════════
 // INDIKATOREN & TREND
@@ -161,15 +175,16 @@ wr = ta.wpr(wrLen)
 // Kerze DANACH (Grenze zwischen Trigger-Kerze und Folgekerze) – auch auf der laufenden Kerze.
 chartState = bbTrendState(bbLen, bbMult)[1]
 wrClosed   = barstate.isconfirmed ? wr : wr[1]
-// Weekly im Daily-Chart ohne Repainting: nur abgeschlossene Wochen zählen.
-wReqState  = request.security(syminfo.tickerid, "W", bbTrendState(bbLen, bbMult)[1], lookahead = barmerge.lookahead_on)
+// Übergeordneter TF (W bzw. M) im Trade-Chart ohne Repainting: nur abgeschlossene Wochen bzw. Monate zählen.
+htfReqState = request.security(syminfo.tickerid, htfTf, bbTrendState(bbLen, bbMult)[1], lookahead = barmerge.lookahead_on)
 
-weeklyState = isWeekly ? chartState : isDaily ? wReqState : 0
-dailyState  = isDaily ? chartState : 0
+// htfState: übergeordneter Trend (im Trigger-Chart dessen eigener Trend), ltfState: Trend des Trade-TF.
+htfState = tradeChart ? htfReqState : trigChart ? chartState : 0
+ltfState = tradeChart ? chartState : 0
 
-// Trigger laut Guide: Weekly UND Daily stehen auf Kauf bzw. Verkauf (im Weekly-Chart nur Weekly).
-longTrend  = isDaily ? weeklyState == 1  and dailyState == 1  : weeklyState == 1
-shortTrend = isDaily ? weeklyState == -1 and dailyState == -1 : weeklyState == -1
+// Trigger laut Guide: übergeordneter TF UND Trade-TF stehen auf Kauf bzw. Verkauf (im Trigger-Chart nur dessen Trend).
+longTrend  = tradeChart ? htfState == 1  and ltfState == 1  : htfState == 1
+shortTrend = tradeChart ? htfState == -1 and ltfState == -1 : htfState == -1
 
 // ═══════════════════════════════════════════════════════════════════
 // EARNINGS
@@ -186,9 +201,11 @@ pastEarn   = request.earnings(syminfo.tickerid, earnings.actual, gaps = barmerge
 earnBar    = not na(pastEarn)
 
 // Farbe für das Sperrfenster vergangener Earnings, rückwirkend k Kerzen vor der Earnings-Kerze.
-EARN_COL = color.new(color.gray, 55)
+// Im Monthly-Chart kein Grau: bei Quartalszahlen wären sonst bis zu zwei von drei Monaten grau.
+EARN_COL  = color.new(color.gray, 55)
+earnBgOn  = showEarnBg and not isMonthly
 pastEarnCol(int k) =>
-    showEarnBg and earnBar and time_close[k] > time - earnWinMs ? EARN_COL : na
+    earnBgOn and earnBar and time_close[k] > time - earnWinMs ? EARN_COL : na
 
 // ═══════════════════════════════════════════════════════════════════
 // SETUP-LOGIK
@@ -220,8 +237,8 @@ if setupDir != 0
 //    bzw. Upday (Short) den Entry auf die neue Kerze nach.
 //    SL: liegt immer unter dem tiefsten Tief (Long) bzw. über dem höchsten Hoch (Short) seit der
 //    ersten Signalkerze – auch Kerzen ohne Signal ziehen ihn nach. Er wandert nie zurück in die Bewegung.
-longSig  = isDaily and inRange and enableLong  and longTrend  and close < open and wr <= wrLongLvl  and not earnBlock
-shortSig = isDaily and inRange and enableShort and shortTrend and close > open and wr >= wrShortLvl and not earnBlock
+longSig  = tradeChart and inRange and enableLong  and longTrend  and close < open and wr <= wrLongLvl  and not earnBlock
+shortSig = tradeChart and inRange and enableShort and shortTrend and close > open and wr >= wrShortLvl and not earnBlock
 moveSig  = setupDir == 1 ? close < open : setupDir == -1 ? close > open : false
 
 if barstate.isconfirmed and evTrigDir == 0
@@ -283,14 +300,14 @@ plot(maShow and ma2On ? ma2 : na, "MA 50", ma2Col, maWidth, linestyle = maStyle)
 plot(maShow and ma3On ? ma3 : na, "MA 150", ma3Col, maWidth, linestyle = maStyle)
 plot(maShow and ma4On ? ma4 : na, "MA 200", ma4Col, maWidth, linestyle = maStyle)
 
-bgLong  = bgMode == "Trigger (W + D)" ? longTrend  : bgMode == "Weekly-Trend" and weeklyState == 1
-bgShort = bgMode == "Trigger (W + D)" ? shortTrend : bgMode == "Weekly-Trend" and weeklyState == -1
+bgLong  = bgMode == "Trigger" ? longTrend  : bgMode == "Weekly-Trend" and htfState == 1
+bgShort = bgMode == "Trigger" ? shortTrend : bgMode == "Weekly-Trend" and htfState == -1
 bgcolor(bgLong  ? bgLongCol  : na, title = "Long-Trigger Zone")
 bgcolor(bgShort ? bgShortCol : na, title = "Short-Trigger Zone")
 
 // Earnings-Sperrfenster grau (über dem Trigger-Hintergrund).
 // Aktueller Termin: direkt. Vergangene Termine: rückwirkend per Offset (max. 16 Kerzen ≈ 21 Kalendertage).
-bgcolor(showEarnBg and earnSoon ? EARN_COL : na, title = "Earnings-Sperrfenster")
+bgcolor(earnBgOn and earnSoon ? EARN_COL : na, title = "Earnings-Sperrfenster")
 bgcolor(pastEarnCol(0),  offset = 0,   editable = false)
 bgcolor(pastEarnCol(1),  offset = -1,  editable = false)
 bgcolor(pastEarnCol(2),  offset = -2,  editable = false)
@@ -308,9 +325,9 @@ bgcolor(pastEarnCol(13), offset = -13, editable = false)
 bgcolor(pastEarnCol(14), offset = -14, editable = false)
 bgcolor(pastEarnCol(15), offset = -15, editable = false)
 
-// Weekly-Trendwechsel (nur für Alerts; im Chart zeigt der Hintergrund die Grenze)
-weeklyUpEdge   = weeklyState == 1  and weeklyState[1] != 1
-weeklyDownEdge = weeklyState == -1 and weeklyState[1] != -1
+// Trendwechsel des übergeordneten TF (W bzw. M; nur für Alerts – im Chart zeigt der Hintergrund die Grenze)
+weeklyUpEdge   = htfState == 1  and htfState[1] != 1
+weeklyDownEdge = htfState == -1 and htfState[1] != -1
 
 // ═══════════════════════════════════════════════════════════════════
 // DARSTELLUNG – Setup (nur Linien, inkl. des Bars, auf dem der Entry erreicht wird)
@@ -409,8 +426,8 @@ if symInfoShow and barstate.islast
     table.cell(symTbl, 2, 1, etf == "–" ? "–" : "(evtl. " + etf + ")", bgcolor = SYM_BG, text_color = color.new(chart.fg_color, 30), text_size = size.small, tooltip = "Sektor-ETF (Select Sector SPDR) – eigene Näherung aus dem TradingView-Sektor. Gilt nur, falls die Aktie im S&P 500 ist; das liefert Pine nicht.")
 
 // Nur im Datenfenster sichtbar (zur Kontrolle, was der Indikator je Bar sieht)
-plot(weeklyState, "Trend Weekly (1 / -1)", display = display.data_window)
-plot(dailyState, "Trend Daily (1 / -1)", display = display.data_window)
+plot(htfState, "Trend übergeordnet W bzw. M (1 / -1)", display = display.data_window)
+plot(ltfState, "Trend Trade-TF D bzw. W (1 / -1)", display = display.data_window)
 plot(wrClosed, "Williams %R (abgeschl. Kerze)", display = display.data_window)
 
 // ═══════════════════════════════════════════════════════════════════
@@ -421,10 +438,10 @@ if showTable and barstate.islast
     statusTxt = setupDir == 0 ? "Kein Setup" : (setupDir == 1 ? "Long-Setup" : "Short-Setup") + (riskOk ? "" : " (Risiko außerhalb)")
     lvlTxt    = setupDir != 0 ? str.tostring(entryLvl, format.mintick) + " / SL " + str.tostring(slLvl, format.mintick) + " / R " + str.tostring(riskPct, "0.0") + " %" : "–"
     earnTxt   = na(nextEarn) ? "keine Daten" : str.format_time(int(nextEarn), "dd.MM.yyyy", syminfo.timezone) + " (" + str.tostring(math.ceil(daysToEarn)) + " T)"
-    table.cell(tbl, 0, 0, "Trend W", text_color = chart.fg_color, text_size = size.small)
-    table.cell(tbl, 1, 0, trendTxt(weeklyState), text_color = trendCol(weeklyState), text_size = size.small)
-    table.cell(tbl, 0, 1, "Trend D", text_color = chart.fg_color, text_size = size.small)
-    table.cell(tbl, 1, 1, isDaily ? trendTxt(dailyState) : "–", text_color = trendCol(dailyState), text_size = size.small)
+    table.cell(tbl, 0, 0, "Trend " + htfTf, text_color = chart.fg_color, text_size = size.small)
+    table.cell(tbl, 1, 0, trendTxt(htfState), text_color = trendCol(htfState), text_size = size.small)
+    table.cell(tbl, 0, 1, "Trend " + ltfName, text_color = chart.fg_color, text_size = size.small)
+    table.cell(tbl, 1, 1, tradeChart ? trendTxt(ltfState) : "–", text_color = trendCol(ltfState), text_size = size.small)
     table.cell(tbl, 0, 2, "Williams %R", text_color = chart.fg_color, text_size = size.small)
     table.cell(tbl, 1, 2, str.tostring(wrClosed, "0.0"), text_color = wrClosed <= wrLongLvl ? color.green : wrClosed >= wrShortLvl ? color.red : chart.fg_color, text_size = size.small)
     table.cell(tbl, 0, 3, "Status", text_color = chart.fg_color, text_size = size.small)
@@ -435,7 +452,7 @@ if showTable and barstate.islast
     table.cell(tbl, 1, 5, earnTxt, text_color = earnSoon ? color.orange : chart.fg_color, text_size = size.small)
     if not tfValid
         table.cell(tbl, 0, 6, "⚠", text_color = color.orange, text_size = size.small)
-        table.cell(tbl, 1, 6, "Nur für Daily- und Weekly-Chart", text_color = color.orange, text_size = size.small)
+        table.cell(tbl, 1, 6, "Spielweise " + playMode + ": nur " + (isMW ? "Weekly- und Monthly-Chart" : "Daily-, Weekly- und Monthly-Chart"), text_color = color.orange, text_size = size.small)
 
 // ═══════════════════════════════════════════════════════════════════
 // ALERTS

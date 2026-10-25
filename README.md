@@ -5,8 +5,19 @@ Er dient dazu, Aktien schnell auf mögliche Setups zu scannen. Er simuliert kein
 führt keine Orders aus.
 
 **Installation:** Inhalt von [`akj_setup_indikator.pine`](akj_setup_indikator.pine) in den
-Pine-Editor von TradingView kopieren → „Zum Chart hinzufügen“. Gedacht für Daily-Charts
-(Setups) und Weekly-Charts (Weekly-Trigger).
+Pine-Editor von TradingView kopieren → „Zum Chart hinzufügen“.
+
+**Spielweise** (Einstellung in der Gruppe „Trend“):
+
+| Spielweise | Trade-Chart (Trigger + Setups) | Trigger-Chart (nur Hintergrund) |
+|---|---|---|
+| **W + D** (Standard) | Daily: Weekly UND Daily | Weekly: Weekly-Trigger |
+| **M + W** | Weekly: Monthly UND Weekly | – |
+
+Das Monthly-Chart zeigt in beiden Spielweisen den Monthly-Trigger (ohne Earnings-Grau). Risiko-Grenzen (W + D 2–7 %,
+M + W 3–12 %) und Earnings-Sperrfenster sind je Spielweise einstellbar. Für beide Spielweisen im
+selben Chart den Indikator zweimal hinzufügen (bei einer Instanz ggf. Hintergrund, BB und MAs aus).
+Im Pine Screener für M + W die Spielweise umstellen und den Timeframe 1W wählen.
 
 **Anzeige im Chart**
 
