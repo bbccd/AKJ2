@@ -1,0 +1,188 @@
+//@version=6
+strategy("AKJ2.0 – Strategie (Backtest)", shorttitle = "AKJ2.0 S", overlay = true, initial_capital = 10000, currency = currency.USD, pyramiding = 0, default_qty_type = strategy.fixed, default_qty_value = 1, commission_type = strategy.commission.cash_per_order, commission_value = 1, slippage = 2, margin_long = 100, margin_short = 100, use_bar_magnifier = true, process_orders_on_close = false)
+
+// Backtest-Version des Indikators akj_setup_indikator.pine (nur Daily-Chart).
+// Setup-Logik ist aus dem Indikator KOPIERT – bei Regeländerungen beide Dateien synchron halten!
+// Kommission (Default 1 $/Order) und Slippage (Default 2 Ticks) im Reiter „Eigenschaften“ einstellbar.
+// Einschränkung: Die Earnings-Sperre wirkt nur für den nächsten Termin – im Backtest greift sie für
+// vergangene Earnings NICHT (TradingView liefert vergangene Termine nicht im Voraus).
+
+// ═══════════════════════════════════════════════════════════════════
+// EINSTELLUNGEN
+// ═══════════════════════════════════════════════════════════════════
+G_RANGE = "Zeitraum"
+startDate = input.time(timestamp("2020-01-01"), "Startdatum", group = G_RANGE)
+endDate   = input.time(timestamp("2099-12-31"), "Enddatum", group = G_RANGE)
+
+G_TREND = "Trend"
+bbLen     = input.int(10, "BB Länge", minval = 1, group = G_TREND)
+bbMult    = input.float(1.0, "BB Standardabweichung", minval = 0.1, step = 0.1, group = G_TREND)
+
+G_SETUP = "Setup & Entry"
+enableLong  = input.bool(true, "Long", group = G_SETUP, inline = "dir")
+enableShort = input.bool(true, "Short", group = G_SETUP, inline = "dir")
+wrLen       = input.int(4, "Williams %R Länge", minval = 1, group = G_SETUP)
+wrLongLvl   = input.float(-80.0, "%R Long: Close ≤", group = G_SETUP)
+wrShortLvl  = input.float(-20.0, "%R Short: Close ≥", group = G_SETUP)
+entryTicks  = input.int(2, "Entry-Puffer (Ticks)", minval = 0, group = G_SETUP)
+slTicks     = input.int(2, "Stop-Loss-Puffer (Ticks)", minval = 0, group = G_SETUP)
+bufPermille = input.float(0.0, "Mindest-Puffer (‰ vom Kurs, 0 = aus)", minval = 0.0, step = 0.1, group = G_SETUP, tooltip = "Puffer = größerer Wert aus Ticks und Promille. Für teure Aktien gedacht.")
+expiryBars  = input.int(0, "Setup verfällt nach X Bars (0 = nie)", minval = 0, group = G_SETUP, tooltip = "Gezählt ab dem ersten Setup-Bar.")
+riskFilter  = input.bool(true, "Risiko-Filter", group = G_SETUP, tooltip = "Risiko = |Entry − SL| / Entry. Außerhalb des Bereichs wird keine Order platziert.")
+riskMin     = input.float(2.0, "Risiko min. (%)", minval = 0.0, step = 0.1, group = G_SETUP, inline = "risk")
+riskMax     = input.float(7.0, "max. (%)", minval = 0.0, step = 0.1, group = G_SETUP, inline = "risk")
+
+G_EARN = "Earnings"
+hideNearEarn = input.bool(true, "Keine Orders im Sperrfenster", group = G_EARN, tooltip = "Greift nur für den nächsten Earnings-Termin, nicht für vergangene (Backtest).")
+earnDays     = input.int(8, "Sperrfenster (Kalendertage vor Earnings)", minval = 0, maxval = 21, group = G_EARN)
+
+G_BT = "Positionsgröße & Ausstieg"
+maxDD        = input.float(2000.0, "Max. Drawdown ($)", minval = 1.0, step = 100.0, group = G_BT, tooltip = "Maximal akzeptierter Drawdown des Depots.")
+riskPerTrade = input.float(1.0, "Risiko pro Trade (% vom Max. Drawdown)", minval = 0.01, step = 0.1, group = G_BT, tooltip = "Default: 1 % von 2000 $ = 20 $ Risiko pro Trade. Stückzahl = Risikobetrag / |Entry − SL|, abgerundet auf ganze Stück.")
+exitMode     = input.string("Trailing BB-Mittelband", "Ausstieg", options = ["CRV 1:1 (komplett)", "Trailing BB-Mittelband"], group = G_BT, tooltip = "CRV 1:1: gesamte Position bei Ziel = Entry ± Risiko schließen. Trailing: bei CRV 1:1 SL auf Einstand, danach SL am BB-Mittelband nachziehen (nur in Gewinnrichtung).")
+trailLongOnly = input.bool(true, "Trailing nur für Long (Short immer CRV 1:1)", group = G_BT)
+
+// ═══════════════════════════════════════════════════════════════════
+// FUNKTIONEN (aus dem Indikator kopiert)
+// ═══════════════════════════════════════════════════════════════════
+// Latched Trend: 1 = Kauf (2x Close > oberes BB), -1 = Verkauf (2x Close < unteres BB).
+bbTrendState(simple int len, simple float mult) =>
+    [mid, up, lo] = ta.bb(close, len, mult)
+    var int state = 0
+    if close > up and close[1] > up[1]
+        state := 1
+    else if close < lo and close[1] < lo[1]
+        state := -1
+    state
+
+priceBuffer(float price, int ticks) =>
+    math.max(ticks * syminfo.mintick, price * bufPermille / 1000.0)
+
+setupExpired(int startBar, int barIdx) =>
+    expiryBars > 0 and barIdx - startBar >= expiryBars
+
+// ═══════════════════════════════════════════════════════════════════
+// TREND (nur Daily-Chart: Weekly + Daily)
+// ═══════════════════════════════════════════════════════════════════
+isDaily = timeframe.isdaily and timeframe.multiplier == 1
+inRange = time >= startDate and time <= endDate
+
+[basis, upper, lower] = ta.bb(close, bbLen, bbMult)
+wr = ta.wpr(wrLen)
+
+// Regime auf dieser Kerze: gilt ab der Kerze nach der Trigger-Kerze (wie im Indikator).
+dailyState  = bbTrendState(bbLen, bbMult)[1]
+weeklyState = request.security(syminfo.tickerid, "W", bbTrendState(bbLen, bbMult)[1], lookahead = barmerge.lookahead_on)
+longTrend   = isDaily and weeklyState == 1  and dailyState == 1
+shortTrend  = isDaily and weeklyState == -1 and dailyState == -1
+
+// Regime für die NÄCHSTE Kerze (Orders werden zum Close für die nächste Kerze gesetzt):
+// Daily = Zustand nach dem heutigen Close; Weekly = am Freitag der Zustand der heute endenden Woche.
+dailyNext   = bbTrendState(bbLen, bbMult)
+wStateNow   = request.security(syminfo.tickerid, "W", bbTrendState(bbLen, bbMult), lookahead = barmerge.lookahead_on)
+weeklyNext  = dayofweek == dayofweek.friday ? wStateNow : weeklyState
+longNext    = isDaily and weeklyNext == 1  and dailyNext == 1
+shortNext   = isDaily and weeklyNext == -1 and dailyNext == -1
+
+// ═══════════════════════════════════════════════════════════════════
+// EARNINGS (nur nächster Termin bekannt)
+// ═══════════════════════════════════════════════════════════════════
+DAY_MS        = 86400000
+earnWinMs     = earnDays * DAY_MS
+nextEarn      = earnings.future_time
+earnBlock     = hideNearEarn and not na(nextEarn) and time_close > nextEarn - earnWinMs and time <= nextEarn
+earnBlockNext = hideNearEarn and not na(nextEarn) and time_close + DAY_MS > nextEarn - earnWinMs and time_close <= nextEarn
+
+// ═══════════════════════════════════════════════════════════════════
+// SETUP-LOGIK (aus dem Indikator kopiert; während eines offenen Trades keine Setups)
+// ═══════════════════════════════════════════════════════════════════
+var int   setupDir   = 0
+var int   setupStart = na
+var float entryLvl   = na
+var float slLvl      = na
+
+posDir = strategy.position_size > 0 ? 1 : strategy.position_size < 0 ? -1 : 0
+if posDir != 0
+    setupDir := 0
+
+int evTrigDir = 0
+if setupDir != 0
+    trendLost = setupDir == 1 ? not longTrend : not shortTrend
+    if trendLost or earnBlock or setupExpired(setupStart, bar_index)
+        setupDir := 0
+    else if setupDir == 1 ? high >= entryLvl : low <= entryLvl
+        evTrigDir := setupDir
+        setupDir  := 0
+
+longSig  = posDir == 0 and isDaily and inRange and enableLong  and longTrend  and close < open and wr <= wrLongLvl  and not earnBlock
+shortSig = posDir == 0 and isDaily and inRange and enableShort and shortTrend and close > open and wr >= wrShortLvl and not earnBlock
+moveSig  = setupDir == 1 ? close < open : setupDir == -1 ? close > open : false
+
+if barstate.isconfirmed and evTrigDir == 0 and posDir == 0
+    newDir = setupDir != 0 ? (moveSig ? setupDir : 0) : longSig ? 1 : shortSig ? -1 : 0
+    if newDir != 0
+        barSl = math.round_to_mintick(newDir == 1 ? low - priceBuffer(low, slTicks) : high + priceBuffer(high, slTicks))
+        if setupDir == 0
+            setupStart := bar_index
+            slLvl      := barSl
+        else
+            slLvl      := newDir == 1 ? math.min(slLvl, barSl) : math.max(slLvl, barSl)
+        setupDir := newDir
+        entryLvl := math.round_to_mintick(newDir == 1 ? high + priceBuffer(high, entryTicks) : low - priceBuffer(low, entryTicks))
+    else if setupDir != 0
+        barSl = math.round_to_mintick(setupDir == 1 ? low - priceBuffer(low, slTicks) : high + priceBuffer(high, slTicks))
+        slLvl := setupDir == 1 ? math.min(slLvl, barSl) : math.max(slLvl, barSl)
+
+riskPct = setupDir != 0 ? math.abs(entryLvl - slLvl) / entryLvl * 100 : na
+riskOk  = not riskFilter or (riskPct >= riskMin and riskPct <= riskMax)
+
+// ═══════════════════════════════════════════════════════════════════
+// ORDERS
+// Zum Close jeder Kerze wird entschieden, welche Orders für die nächste Kerze gelten.
+// ═══════════════════════════════════════════════════════════════════
+ID_L  = "Long"
+ID_S  = "Short"
+riskAmt = maxDD * riskPerTrade / 100.0
+
+var float trSl     = na      // aktueller Stop des (geplanten/offenen) Trades
+var float trTp1    = na      // Ziel bei CRV 1:1
+var bool  trTrail  = false   // Trailing-Modus für diesen Trade?
+var bool  trTp1Hit = false
+
+// 1) Flat: Stop-Order für das offene Setup setzen/nachziehen oder löschen.
+if posDir == 0
+    trTp1Hit := false
+    expiryNext = setupDir != 0 and setupExpired(setupStart, bar_index + 1)
+    trendNext  = setupDir == 1 ? longNext : setupDir == -1 ? shortNext : false
+    qty        = setupDir != 0 ? math.floor(riskAmt / math.abs(entryLvl - slLvl)) : 0
+    orderOk    = setupDir != 0 and riskOk and trendNext and not earnBlockNext and not expiryNext and qty >= 1
+    if orderOk
+        id      = setupDir == 1 ? ID_L : ID_S
+        trSl    := slLvl
+        trTp1   := entryLvl + setupDir * math.abs(entryLvl - slLvl)
+        trTrail := exitMode == "Trailing BB-Mittelband" and (setupDir == 1 or not trailLongOnly)
+        strategy.cancel(setupDir == 1 ? ID_S : ID_L)
+        strategy.entry(id, setupDir == 1 ? strategy.long : strategy.short, qty = qty, stop = entryLvl)
+        // Exit-Order wird mit der Entry-Order aktiv – greift also schon auf der Einstiegskerze.
+        strategy.exit("Exit " + id, id, stop = trSl, limit = trTrail ? na : trTp1)
+    else
+        strategy.cancel(ID_L)
+        strategy.cancel(ID_S)
+
+// 2) Im Trade (nur Trailing-Modus): ab CRV 1:1 SL auf Einstand, danach am BB-Mittelband nachziehen.
+else if trTrail
+    if not trTp1Hit and (posDir == 1 ? high >= trTp1 : low <= trTp1)
+        trTp1Hit := true
+    if trTp1Hit
+        be   = strategy.position_avg_price
+        trSl := posDir == 1 ? math.max(trSl, be, basis) : math.min(trSl, be, basis)
+    id = posDir == 1 ? ID_L : ID_S
+    strategy.exit("Exit " + id, id, stop = trSl)
+
+// ═══════════════════════════════════════════════════════════════════
+// DARSTELLUNG (schlank – Details liefert der Strategietester)
+// ═══════════════════════════════════════════════════════════════════
+plot(basis, "BB Mid", color.new(color.gray, 20), 1)
+plot(posDir == 0 and setupDir != 0 and riskOk ? entryLvl : na, "Entry-Order", color.blue, 2, plot.style_linebr)
+plot(posDir != 0 ? trSl : na, "Stop", color.red, 1, plot.style_linebr)
+plot(posDir != 0 and not trTp1Hit ? trTp1 : na, "Ziel CRV 1:1", color.green, 1, plot.style_linebr)

@@ -25,6 +25,13 @@ und meldet Fehler zurück.
   Im Screener ist earnings.future_time leer (getestet) → Earnings-Sperre greift dort nicht. Nutzer will KEINE
   Schätzung des Termins; Einschränkung ist im README dokumentiert, Treffer werden im Chart geprüft.
 
+- `akj_strategy.pine` – Backtest-Strategie (nur Daily), Setup-Logik KOPIERT aus dem Indikator (synchron halten!).
+  Positionsgröße: Max. Drawdown (2000 $) × Risiko/Trade (1 %) / |Entry − SL|, ganze Stück.
+  Ausstieg: „CRV 1:1 (komplett)“ oder „Trailing BB-Mittelband“ (ab 1:1 SL auf BE, dann BB-Mid);
+  Default Trailing nur Long, Short immer 1:1. Kein 50-%-Teilverkauf (Nutzer-Vorgabe). Kommission 1 $/Order,
+  Slippage 2 Ticks (strategy()-Properties), Bar Magnifier an. Orders werden zum Close für die nächste Kerze
+  gesetzt; dafür Trend „next“ (Daily ohne [1], Weekly am Freitag aus der laufenden Woche).
+
 ## Strategie-Regeln (wie mit dem Nutzer geklärt)
 - BB 10 / 1, Williams %R Länge 4.
 - Trend: 2x Close > oberes BB = Kauf, 2x Close < unteres BB = Verkauf. Gilt, bis der Gegentrigger kommt.
@@ -55,4 +62,7 @@ und meldet Fehler zurück.
 - Earnings-Filter wirkt nur auf aktuelle Signale (TradingView liefert nur das nächste Datum) – für Backtest lösen.
   Folge: Nach den Earnings erscheinen beim Neuladen Setups aus dem ehemaligen Fenster. Vom Nutzer als
   akzeptabel/hilfreich bewertet (live war die Sperre aktiv); im README dokumentiert.
-- Später: `strategy()`-Version für Backtests, Positionsgröße aus Risiko-Regeln.
+- `strategy()`-Version für Backtests, Positionsgröße aus Risiko-Regeln – in Arbeit (Branch feature/strategy).
+  Entscheidung: Setup-Logik zunächst aus dem Indikator KOPIEREN (eigene Datei). Später evtl. Library
+  (privat veröffentlicht), dann zuerst nur für die Strategie; Indikator behält vorerst den vollen Code.
+  Bei Regeländerungen bis dahin Indikator und Strategie synchron halten!

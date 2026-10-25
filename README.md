@@ -20,6 +20,26 @@ Pine-Editor von TradingView kopieren → „Zum Chart hinzufügen“. Gedacht f�
 - Grauer Hintergrund = Earnings-Sperrfenster (x Tage vorher bis einschließlich Earnings-Tag/-Woche).
   Den Earnings-Termin selbst zeigt TradingView mit seinem eigenen „E“-Symbol an.
 
+## Backtest (Strategie)
+
+[`akj_strategy.pine`](akj_strategy.pine) ist die `strategy()`-Version für den Strategietester von
+TradingView (nur Daily-Chart). Die Setup-Logik ist aus dem Indikator kopiert – bei Regeländerungen
+müssen beide Dateien angepasst werden.
+
+- **Entry:** echte Stop-Order auf dem Entry des Setups, wird täglich nachgezogen bzw. gelöscht, wenn das
+  Setup ungültig wird (Trigger weg, Earnings, Risiko außerhalb 2–7 %). Während ein Trade läuft, werden
+  keine neuen Setups gesucht. Long und Short.
+- **Positionsgröße:** Risikobetrag = Max. Drawdown × Risiko pro Trade (Default 2000 $ × 1 % = 20 $),
+  Stückzahl = Risikobetrag / |Entry − SL|, abgerundet. Ergibt das weniger als 1 Stück, wird nicht gehandelt.
+- **Ausstieg** (Setting): *CRV 1:1* – ganze Position bei Ziel = Entry ± Risiko; oder *Trailing* – bei
+  CRV 1:1 SL auf Einstand, danach SL am BB-Mittelband (nur in Gewinnrichtung). Default: Trailing nur
+  für Long, Short immer CRV 1:1.
+- **Kosten:** 1 $ Kommission pro Order, 2 Ticks Slippage – im Reiter „Eigenschaften“ der Strategie änderbar.
+  Bar Magnifier ist aktiv (Intraday-Daten für die Reihenfolge innerhalb einer Tageskerze).
+
+> **⚠ Earnings im Backtest:** Die Earnings-Sperre wirkt nur für den nächsten Termin. Vergangene
+> Earnings sind im Backtest nicht gesperrt – Trades kurz vor Earnings werden mitgezählt.
+
 ## Watchlist scannen (Pine Screener)
 
 Mit dem [Pine Screener](https://www.tradingview.com/pine-screener/) (ab Premium-Abo) lassen sich alle
