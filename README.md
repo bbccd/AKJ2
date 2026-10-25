@@ -11,6 +11,11 @@ Pine-Editor von TradingView kopieren → „Zum Chart hinzufügen“. Gedacht f�
 **Anzeige im Chart**
 
 - Bollinger-Bänder 10 / 1
+- **All-Time High** als dicke, buttergelbe horizontale Linie mit Label (Gruppe „Zusatzinfos“)
+- Kleine Tabelle unten Mitte: **Sektor | Industrie | (evtl. Sektor-ETF)**, z. B. „Technology Services |
+  Packaged Software | (evtl. XLK)“. Sektor und Industrie kommen von TradingView. Der Sektor-ETF (Select Sector
+  SPDR) ist eine eigene Näherung (TradingView-Sektoren ≠ GICS) und gilt nur für S&P-500-Aktien – die
+  Mitgliedschaft liefert Pine nicht, daher „evtl.“. Index-Mitgliedschaft und Heimatbörse liefert Pine nicht.
 - Moving Averages 20 / 50 / 150 / 200 (SMA oder EMA), Farbverlauf Gelb → Orange → Rot von kurz nach lang;
   einzeln und gesamt abschaltbar, Typ, Dicke und Linienart gemeinsam einstellbar
 - Hintergrund: türkis = Long-Trigger, pink = Short-Trigger (Farben einstellbar)

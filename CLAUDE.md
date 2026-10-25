@@ -23,6 +23,15 @@ und meldet Fehler zurück.
 - Moving Averages im Indikator (nur Anzeige, keine Setup-Logik): 20/50/150/200, SMA/EMA für alle gemeinsam,
   Dicke + Linienart gemeinsam, jede MA einzeln + Paket gesamt abschaltbar. Farben wie TradingView-„MA Ribbon“
   (Gelb → Orange → Rot = kurz → lang); 200er-Rot liegt nahe an SL-Linie/unterem BB – ggf. anpassen.
+- Zusatzinfos (Gruppe „Zusatzinfos“, nur Anzeige): All-Time High als dicke Linie (extend.both) + Label
+  „All-Time High <Preis>“, Buttergelb #FFE135 (bewusst heller als MA 20 #F6C309). ATH aus Monatsdaten
+  (ganze Historie) + Chart-Kerzen (laufender Monat).
+  ATH-Label am linken sichtbaren Rand (chart.left_visible_bar_time), Spitze links – Spitze rechts getestet und
+  verworfen (Label ragt aus dem Bild / wandert beim Scrollen).
+  Tabelle unten Mitte: Sektor (syminfo.sector) | Industrie (syminfo.industry) | „(evtl. XLY)“ – Sektor-ETF ist
+  eigenes Mapping TradingView-Sektor → SPDR XL* (Näherung, nicht gegen ETF-Bestände geprüft, nur USD-Aktien);
+  Select Sector SPDRs enthalten nur S&P-500-Aktien, Mitgliedschaft unbekannt → bewusst vorsichtig formuliert. Börsen-Spalte entfernt: syminfo.prefix = Datenquelle (bei Nutzer „BATS“),
+  nicht Heimatbörse. Index-Mitgliedschaft nicht in Pine; Listen im Code vom Nutzer verworfen (zu groß).
 - Pine Screener (Nutzer hat Premium): Plots „Setup-Status (1 Long / -1 Short / 0)“, „Setup Entry“, „Setup SL“
   nur im Datenfenster (display.data_window). Plot-Titel nicht ändern – sonst brechen gespeicherte Screener-Filter.
   Im Screener ist earnings.future_time leer (getestet) → Earnings-Sperre greift dort nicht. Nutzer will KEINE
@@ -60,6 +69,9 @@ und meldet Fehler zurück.
 - Risiko: 0,5–1 % (normal) bzw. 1–2 % (stark) des max. akzeptierten Depot-Drawdowns pro Trade.
 
 ## Offene Punkte / Refinement
+- Externe Daten (z. B. Index-Mitgliedschaft): Pine hat keinen Internetzugriff. Einziger Weg wäre Pine Seeds
+  (request.seed, CSV in GitHub-Repo) – Stand Okt. 2026: Anlage NEUER Repositories von TradingView ausgesetzt,
+  bestehende laufen weiter; Interesse per Google-Formular im Repo tradingview-pine-seeds/docs. Später erneut prüfen.
 - Setup-Verfall: laut PDF keiner, in der Praxis aber gewünscht → Hook `setupExpired()` + Input vorhanden (Default aus).
 - Puffer abhängig vom Kurs (z. B. „mind. 2 Ticks und mind. x ‰“) verfeinern.
 - Earnings-Filter wirkt nur auf aktuelle Signale (TradingView liefert nur das nächste Datum) – für Backtest lösen.

@@ -14,7 +14,8 @@ endDate   = input.time(timestamp("2099-12-31"), "Enddatum", group = G_RANGE)
 G_TREND = "Trend"
 bbLen     = input.int(10, "BB Länge", minval = 1, group = G_TREND)
 bbMult    = input.float(1.0, "BB Standardabweichung", minval = 0.1, step = 0.1, group = G_TREND)
-showBB    = input.bool(true, "Bollinger-Bänder anzeigen", group = G_TREND)
+showBB    = input.bool(true, "Bollinger-Bänder anzeigen", group = G_TREND, inline = "bb")
+bbWidth   = input.int(3, "Dicke", minval = 1, maxval = 4, group = G_TREND, inline = "bb")
 bgLongCol  = input.color(#1FBFB840, "Farbe Long-Hintergrund", group = G_TREND, inline = "bgcol")
 bgShortCol = input.color(#F0629240, "Short", group = G_TREND, inline = "bgcol")
 bgMode    = input.string("Trigger (W + D)", "Hintergrund", options = ["Trigger (W + D)", "Weekly-Trend", "Aus"], group = G_TREND, tooltip = "Trigger: im Daily-Chart nur gefärbt, wenn Weekly und Daily beide Kauf (Long-Farbe) bzw. beide Verkauf (Short-Farbe) sind, sonst kein Hintergrund. Im Weekly-Chart zeigt er den Weekly-Trigger. Weekly-Trend: nur der Weekly-Trend wie im alten AKJ2.")
@@ -42,8 +43,8 @@ earnDays     = input.int(8, "Sperrfenster (Kalendertage vor Earnings)", minval =
 G_MA = "Moving Averages"
 maShow    = input.bool(true, "Moving Averages anzeigen", group = G_MA)
 maType    = input.string("SMA", "Typ (für alle)", options = ["SMA", "EMA"], group = G_MA)
-maWidth   = input.int(1, "Liniendicke", minval = 1, maxval = 4, group = G_MA)
-maStyleIn = input.string("Durchgezogen", "Linienart", options = ["Durchgezogen", "Gestrichelt", "Gepunktet"], group = G_MA)
+maWidth   = input.int(3, "Liniendicke", minval = 1, maxval = 4, group = G_MA)
+maStyleIn = input.string("Gestrichelt", "Linienart", options = ["Durchgezogen", "Gestrichelt", "Gepunktet"], group = G_MA)
 ma1On  = input.bool(true, "MA 1", group = G_MA, inline = "ma1")
 ma1Len = input.int(20, "", minval = 1, group = G_MA, inline = "ma1")
 ma1Col = input.color(#F6C309, "", group = G_MA, inline = "ma1")
@@ -56,6 +57,12 @@ ma3Col = input.color(#FB6500, "", group = G_MA, inline = "ma3")
 ma4On  = input.bool(true, "MA 4", group = G_MA, inline = "ma4")
 ma4Len = input.int(200, "", minval = 1, group = G_MA, inline = "ma4")
 ma4Col = input.color(#F60C0C, "", group = G_MA, inline = "ma4")
+
+G_INFO = "Zusatzinfos"
+athShow  = input.bool(true, "All-Time High anzeigen", group = G_INFO)
+athCol   = input.color(#FFE135, "Farbe", group = G_INFO, inline = "ath")
+athWidth = input.int(3, "Dicke", minval = 1, maxval = 6, group = G_INFO, inline = "ath")
+symInfoShow = input.bool(true, "Sektor / Industrie / Sektor-ETF (unten Mitte)", group = G_INFO, tooltip = "Sektor und Industrie kommen direkt von TradingView. Der Sektor-ETF (Select Sector SPDR) ist eine eigene Näherung aus dem TradingView-Sektor (≠ GICS) und gilt nur für S&P-500-Aktien – ob die Aktie im S&P 500 ist, liefert Pine nicht. Daher „(evtl. …)“, nur bei US-Aktien.")
 
 G_SHOW = "Anzeige"
 sigSizeIn   = input.string("Normal", "Größe Signal-Marker", options = ["Klein", "Normal", "Groß"], group = G_SHOW)
@@ -95,6 +102,40 @@ maCalc(simple int len) =>
     e = ta.ema(close, len)
     s = ta.sma(close, len)
     maType == "EMA" ? e : s
+
+// TradingView-Sektor (FactSet-Einteilung) → SPDR-Sektor-ETF (GICS). Näherung; bekannte Abweichungen über
+// die Industrie korrigiert (REITs → XLRE, Internet-Dienste wie Alphabet/Meta → XLC, Discounter → XLP).
+sectorEtf(string sec, string ind) =>
+    string etf = "–"
+    if str.contains(ind, "Real Estate")
+        etf := "XLRE"
+    else if ind == "Internet Software/Services"
+        etf := "XLC"
+    else if ind == "Food Retail" or ind == "Discount Stores"
+        etf := "XLP"
+    else
+        etf := switch sec
+            "Technology Services"    => "XLK"
+            "Electronic Technology"  => "XLK"
+            "Communications"         => "XLC"
+            "Consumer Services"      => "XLY"
+            "Consumer Durables"      => "XLY"
+            "Retail Trade"           => "XLY"
+            "Consumer Non-Durables"  => "XLP"
+            "Health Technology"      => "XLV"
+            "Health Services"        => "XLV"
+            "Finance"                => "XLF"
+            "Energy Minerals"        => "XLE"
+            "Utilities"              => "XLU"
+            "Non-Energy Minerals"    => "XLB"
+            "Process Industries"     => "XLB"
+            "Producer Manufacturing" => "XLI"
+            "Industrial Services"    => "XLI"
+            "Commercial Services"    => "XLI"
+            "Distribution Services"  => "XLI"
+            "Transportation"         => "XLI"
+            => "–"
+    etf
 
 trendTxt(int s) => s == 1 ? "UP ▲" : s == -1 ? "DOWN ▼" : "–"
 trendCol(int s) => s == 1 ? color.green : s == -1 ? color.red : color.gray
@@ -209,9 +250,9 @@ riskOk   = not riskFilter or (riskPct >= riskMin and riskPct <= riskMax)
 // ═══════════════════════════════════════════════════════════════════
 // DARSTELLUNG – Bollinger-Bänder & Trend
 // ═══════════════════════════════════════════════════════════════════
-plot(showBB ? basis : na, "BB Mid",   color.new(color.gray, 20), 1)
-plot(showBB ? upper : na, "BB Upper", color.new(color.blue, 40), 1)
-plot(showBB ? lower : na, "BB Lower", color.new(color.red, 40), 1)
+plot(showBB ? basis : na, "BB Mid",   color.new(color.gray, 20), bbWidth)
+plot(showBB ? upper : na, "BB Upper", color.new(color.blue, 40), bbWidth)
+plot(showBB ? lower : na, "BB Lower", color.new(color.red, 40), bbWidth)
 
 // Moving Averages (unabhängig von der Setup-Logik, nur zur Orientierung)
 maStyle = maStyleIn == "Gestrichelt" ? plot.linestyle_dashed : maStyleIn == "Gepunktet" ? plot.linestyle_dotted : plot.linestyle_solid
@@ -306,6 +347,44 @@ if barstate.islast
     if curActive
         curTxt = (setupDir == 1 ? "LONG-SETUP" : "SHORT-SETUP") + "\nEntry " + str.tostring(entryLvl, format.mintick) + "\nSL " + str.tostring(slLvl, format.mintick) + "\nR: " + str.tostring(riskPct, "0.0") + " %"
         curLbl := label.new(bar_index, entryLvl, curTxt, style = label.style_label_left, color = color.new(curCol, 0), textcolor = color.white, size = size.normal, text_formatting = text.format_bold)
+
+// ═══════════════════════════════════════════════════════════════════
+// ZUSATZINFOS – All-Time High
+// Monatsdaten liefern die gesamte Historie (auch vor den im Chart geladenen Kerzen),
+// die Chart-Kerzen ergänzen den laufenden Monat.
+// ═══════════════════════════════════════════════════════════════════
+athMonthly = request.security(syminfo.tickerid, "M", ta.max(high)[1], lookahead = barmerge.lookahead_on)
+athChart   = ta.max(high)
+ath        = math.max(nz(athMonthly, athChart), athChart)
+
+var line  athLine = na
+var label athLbl  = na
+if barstate.islast
+    line.delete(athLine)
+    label.delete(athLbl)
+    athLine := na
+    athLbl  := na
+    if athShow
+        athLine := line.new(bar_index - 1, ath, bar_index, ath, extend = extend.both, color = athCol, width = athWidth)
+        // Label am linken Rand des sichtbaren Bereichs (rechts steht ggf. das Label des aktuellen Setups).
+        // Spitze zwangsläufig links: Pine richtet an der Spitze aus, mit Spitze rechts läge der Kasten außerhalb.
+        athLbl  := label.new(chart.left_visible_bar_time, ath, "All-Time High " + str.tostring(ath, format.mintick), xloc = xloc.bar_time, style = label.style_label_left, color = athCol, textcolor = color.black, size = size.normal, text_formatting = text.format_bold)
+
+// ═══════════════════════════════════════════════════════════════════
+// ZUSATZINFOS – Sektor / Industrie / Sektor-ETF (kompakte Tabelle unten Mitte)
+// Sektor und Industrie: TradingView-Daten. Sektor-ETF: eigene Näherung, vorsichtig als „(evtl. XLY)“ –
+// Select Sector SPDRs enthalten nur S&P-500-Aktien, die Mitgliedschaft liefert Pine aber nicht.
+// Keine Börse/Index: syminfo.prefix ist die Datenquelle (z. B. BATS), nicht die Heimatbörse; Index-Mitgliedschaft
+// gibt es in Pine nicht (Listen im Code verworfen – zu groß, Pflegeaufwand).
+// ═══════════════════════════════════════════════════════════════════
+var table symTbl = table.new(position.bottom_center, 3, 1, bgcolor = color.new(color.gray, 85), border_color = color.new(color.gray, 60), border_width = 1)
+if symInfoShow and barstate.islast
+    sec    = na(syminfo.sector) ? "" : syminfo.sector
+    ind    = na(syminfo.industry) ? "" : syminfo.industry
+    etf    = syminfo.currency == "USD" ? sectorEtf(sec, ind) : "–"
+    table.cell(symTbl, 0, 0, sec == "" ? "–" : sec, text_color = chart.fg_color, text_size = size.small, tooltip = "Sektor (TradingView)")
+    table.cell(symTbl, 1, 0, ind == "" ? "–" : ind, text_color = chart.fg_color, text_size = size.small, tooltip = "Industrie (TradingView)")
+    table.cell(symTbl, 2, 0, etf == "–" ? "–" : "(evtl. " + etf + ")", text_color = color.new(chart.fg_color, 30), text_size = size.small, tooltip = "Sektor-ETF (Select Sector SPDR) – eigene Näherung aus dem TradingView-Sektor. Gilt nur, falls die Aktie im S&P 500 ist; das liefert Pine nicht.")
 
 // Nur im Datenfenster sichtbar (zur Kontrolle, was der Indikator je Bar sieht)
 plot(weeklyState, "Trend Weekly (1 / -1)", display = display.data_window)
