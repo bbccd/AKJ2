@@ -11,6 +11,8 @@ Pine-Editor von TradingView kopieren → „Zum Chart hinzufügen“. Gedacht f�
 **Anzeige im Chart**
 
 - Bollinger-Bänder 10 / 1
+- Moving Averages 20 / 50 / 150 / 200 (SMA oder EMA), Farbverlauf Gelb → Orange → Rot von kurz nach lang;
+  einzeln und gesamt abschaltbar, Typ, Dicke und Linienart gemeinsam einstellbar
 - Hintergrund: türkis = Long-Trigger, pink = Short-Trigger (Farben einstellbar)
 - Marker **L** (unter der Kerze) / **S** (darüber) auf der Signalkerze, in der Farbe des Trigger-Hintergrunds;
   beim aktuellen Setup in der Farbe der Hervorhebung

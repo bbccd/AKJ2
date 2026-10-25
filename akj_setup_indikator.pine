@@ -38,6 +38,25 @@ showEarnBg   = input.bool(true, "Sperrfenster grau hinterlegen", group = G_EARN,
 hideNearEarn = input.bool(true, "Keine Signale im Sperrfenster", group = G_EARN)
 earnDays     = input.int(8, "Sperrfenster (Kalendertage vor Earnings)", minval = 0, maxval = 21, group = G_EARN)
 
+// Farbverlauf kurz → lang wie im TradingView-„Moving Average Ribbon“: Gelb → Orange → Rot.
+G_MA = "Moving Averages"
+maShow    = input.bool(true, "Moving Averages anzeigen", group = G_MA)
+maType    = input.string("SMA", "Typ (für alle)", options = ["SMA", "EMA"], group = G_MA)
+maWidth   = input.int(1, "Liniendicke", minval = 1, maxval = 4, group = G_MA)
+maStyleIn = input.string("Durchgezogen", "Linienart", options = ["Durchgezogen", "Gestrichelt", "Gepunktet"], group = G_MA)
+ma1On  = input.bool(true, "MA 1", group = G_MA, inline = "ma1")
+ma1Len = input.int(20, "", minval = 1, group = G_MA, inline = "ma1")
+ma1Col = input.color(#F6C309, "", group = G_MA, inline = "ma1")
+ma2On  = input.bool(true, "MA 2", group = G_MA, inline = "ma2")
+ma2Len = input.int(50, "", minval = 1, group = G_MA, inline = "ma2")
+ma2Col = input.color(#FB9800, "", group = G_MA, inline = "ma2")
+ma3On  = input.bool(true, "MA 3", group = G_MA, inline = "ma3")
+ma3Len = input.int(150, "", minval = 1, group = G_MA, inline = "ma3")
+ma3Col = input.color(#FB6500, "", group = G_MA, inline = "ma3")
+ma4On  = input.bool(true, "MA 4", group = G_MA, inline = "ma4")
+ma4Len = input.int(200, "", minval = 1, group = G_MA, inline = "ma4")
+ma4Col = input.color(#F60C0C, "", group = G_MA, inline = "ma4")
+
 G_SHOW = "Anzeige"
 sigSizeIn   = input.string("Normal", "Größe Signal-Marker", options = ["Klein", "Normal", "Groß"], group = G_SHOW)
 hlCurrent   = input.bool(true, "Aktuelles Setup hervorheben", group = G_SHOW, tooltip = "Besteht auf der jüngsten Kerze ein offenes Setup, wird der Hintergrund ab der ersten Signalkerze (max. 10 Kerzen) eingefärbt und rechts ein Label mit Entry und SL angezeigt. Aus = Darstellung wie alle anderen Setups.")
@@ -70,6 +89,12 @@ priceBuffer(float price, int ticks) =>
 // Hook fürs Refinement: Wann verfällt ein offenes Setup (Stop-Order noch nicht erreicht)?
 setupExpired(int startBar) =>
     expiryBars > 0 and bar_index - startBar >= expiryBars
+
+// Moving Average je nach Typ (beide berechnen, damit die ta-Funktionen auf jeder Kerze laufen).
+maCalc(simple int len) =>
+    e = ta.ema(close, len)
+    s = ta.sma(close, len)
+    maType == "EMA" ? e : s
 
 trendTxt(int s) => s == 1 ? "UP ▲" : s == -1 ? "DOWN ▼" : "–"
 trendCol(int s) => s == 1 ? color.green : s == -1 ? color.red : color.gray
@@ -187,6 +212,18 @@ riskOk   = not riskFilter or (riskPct >= riskMin and riskPct <= riskMax)
 plot(showBB ? basis : na, "BB Mid",   color.new(color.gray, 20), 1)
 plot(showBB ? upper : na, "BB Upper", color.new(color.blue, 40), 1)
 plot(showBB ? lower : na, "BB Lower", color.new(color.red, 40), 1)
+
+// Moving Averages (unabhängig von der Setup-Logik, nur zur Orientierung)
+maStyle = maStyleIn == "Gestrichelt" ? plot.linestyle_dashed : maStyleIn == "Gepunktet" ? plot.linestyle_dotted : plot.linestyle_solid
+ma1 = maCalc(ma1Len)
+ma2 = maCalc(ma2Len)
+ma3 = maCalc(ma3Len)
+ma4 = maCalc(ma4Len)
+// Plot-Titel müssen konstant sein – sie nennen die Standardlänge (bei geänderter Länge nicht mehr exakt).
+plot(maShow and ma1On ? ma1 : na, "MA 20", ma1Col, maWidth, linestyle = maStyle)
+plot(maShow and ma2On ? ma2 : na, "MA 50", ma2Col, maWidth, linestyle = maStyle)
+plot(maShow and ma3On ? ma3 : na, "MA 150", ma3Col, maWidth, linestyle = maStyle)
+plot(maShow and ma4On ? ma4 : na, "MA 200", ma4Col, maWidth, linestyle = maStyle)
 
 bgLong  = bgMode == "Trigger (W + D)" ? longTrend  : bgMode == "Weekly-Trend" and weeklyState == 1
 bgShort = bgMode == "Trigger (W + D)" ? shortTrend : bgMode == "Weekly-Trend" and weeklyState == -1

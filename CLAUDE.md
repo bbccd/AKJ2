@@ -20,6 +20,9 @@ und meldet Fehler zurück.
   Hintergrund zeigt standardmäßig den Trigger (beide TFs Kauf = türkis, beide Verkauf = pink, sonst keiner);
   reiner Weekly-Hintergrund wie in AKJ2 per Setting wählbar.
 
+- Moving Averages im Indikator (nur Anzeige, keine Setup-Logik): 20/50/150/200, SMA/EMA für alle gemeinsam,
+  Dicke + Linienart gemeinsam, jede MA einzeln + Paket gesamt abschaltbar. Farben wie TradingView-„MA Ribbon“
+  (Gelb → Orange → Rot = kurz → lang); 200er-Rot liegt nahe an SL-Linie/unterem BB – ggf. anpassen.
 - Pine Screener (Nutzer hat Premium): Plots „Setup-Status (1 Long / -1 Short / 0)“, „Setup Entry“, „Setup SL“
   nur im Datenfenster (display.data_window). Plot-Titel nicht ändern – sonst brechen gespeicherte Screener-Filter.
   Im Screener ist earnings.future_time leer (getestet) → Earnings-Sperre greift dort nicht. Nutzer will KEINE
