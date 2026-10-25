@@ -62,7 +62,8 @@ G_INFO = "Zusatzinfos"
 athShow  = input.bool(true, "All-Time High anzeigen", group = G_INFO)
 athCol   = input.color(#FFE135, "Farbe", group = G_INFO, inline = "ath")
 athWidth = input.int(3, "Dicke", minval = 1, maxval = 6, group = G_INFO, inline = "ath")
-symInfoShow = input.bool(true, "Sektor / Industrie / Sektor-ETF (unten Mitte)", group = G_INFO, tooltip = "Sektor und Industrie kommen direkt von TradingView. Der Sektor-ETF (Select Sector SPDR) ist eine eigene Näherung aus dem TradingView-Sektor (≠ GICS) und gilt nur für S&P-500-Aktien – ob die Aktie im S&P 500 ist, liefert Pine nicht. Daher „(evtl. …)“, nur bei US-Aktien.")
+symInfoGap  = input.float(6.0, "Abstand der Tabelle von oben (% der Charthöhe)", minval = 0.0, maxval = 40.0, step = 0.5, group = G_INFO, tooltip = "Unsichtbare Leerzeile über der Tabelle, damit sie unter der Statuszeile steht. Bei vielen Indikatoren in der Statuszeile erhöhen.")
+symInfoShow = input.bool(true, "Sektor / Industrie / Sektor-ETF (oben Mitte)", group = G_INFO, tooltip = "Sektor und Industrie kommen direkt von TradingView. Der Sektor-ETF (Select Sector SPDR) ist eine eigene Näherung aus dem TradingView-Sektor (≠ GICS) und gilt nur für S&P-500-Aktien – ob die Aktie im S&P 500 ist, liefert Pine nicht. Daher „(evtl. …)“, nur bei US-Aktien.")
 
 G_SHOW = "Anzeige"
 sigSizeIn   = input.string("Normal", "Größe Signal-Marker", options = ["Klein", "Normal", "Groß"], group = G_SHOW)
@@ -371,20 +372,25 @@ if barstate.islast
         athLbl  := label.new(chart.left_visible_bar_time, ath, "All-Time High " + str.tostring(ath, format.mintick), xloc = xloc.bar_time, style = label.style_label_left, color = athCol, textcolor = color.black, size = size.normal, text_formatting = text.format_bold)
 
 // ═══════════════════════════════════════════════════════════════════
-// ZUSATZINFOS – Sektor / Industrie / Sektor-ETF (kompakte Tabelle unten Mitte)
+// ZUSATZINFOS – Sektor / Industrie / Sektor-ETF (kompakte Tabelle oben Mitte; unten überlappt sie mit dem Volumen)
 // Sektor und Industrie: TradingView-Daten. Sektor-ETF: eigene Näherung, vorsichtig als „(evtl. XLY)“ –
 // Select Sector SPDRs enthalten nur S&P-500-Aktien, die Mitgliedschaft liefert Pine aber nicht.
 // Keine Börse/Index: syminfo.prefix ist die Datenquelle (z. B. BATS), nicht die Heimatbörse; Index-Mitgliedschaft
 // gibt es in Pine nicht (Listen im Code verworfen – zu groß, Pflegeaufwand).
 // ═══════════════════════════════════════════════════════════════════
-var table symTbl = table.new(position.bottom_center, 3, 1, bgcolor = color.new(color.gray, 85), border_color = color.new(color.gray, 60), border_width = 1)
+// Zeile 0 = unsichtbarer Abstandshalter (Höhe einstellbar), damit die Tabelle unter der Statuszeile steht –
+// Pine kennt nur feste Tabellenpositionen, keine Pixel-Abstände.
+SYM_BG = color.new(color.gray, 85)
+var table symTbl = table.new(position.top_center, 3, 2, border_width = 0)
 if symInfoShow and barstate.islast
     sec    = na(syminfo.sector) ? "" : syminfo.sector
     ind    = na(syminfo.industry) ? "" : syminfo.industry
     etf    = syminfo.currency == "USD" ? sectorEtf(sec, ind) : "–"
-    table.cell(symTbl, 0, 0, sec == "" ? "–" : sec, text_color = chart.fg_color, text_size = size.small, tooltip = "Sektor (TradingView)")
-    table.cell(symTbl, 1, 0, ind == "" ? "–" : ind, text_color = chart.fg_color, text_size = size.small, tooltip = "Industrie (TradingView)")
-    table.cell(symTbl, 2, 0, etf == "–" ? "–" : "(evtl. " + etf + ")", text_color = color.new(chart.fg_color, 30), text_size = size.small, tooltip = "Sektor-ETF (Select Sector SPDR) – eigene Näherung aus dem TradingView-Sektor. Gilt nur, falls die Aktie im S&P 500 ist; das liefert Pine nicht.")
+    table.cell(symTbl, 0, 0, "", height = symInfoGap)
+    table.merge_cells(symTbl, 0, 0, 2, 0)
+    table.cell(symTbl, 0, 1, sec == "" ? "–" : sec, bgcolor = SYM_BG, text_color = chart.fg_color, text_size = size.small, tooltip = "Sektor (TradingView)")
+    table.cell(symTbl, 1, 1, ind == "" ? "–" : ind, bgcolor = SYM_BG, text_color = chart.fg_color, text_size = size.small, tooltip = "Industrie (TradingView)")
+    table.cell(symTbl, 2, 1, etf == "–" ? "–" : "(evtl. " + etf + ")", bgcolor = SYM_BG, text_color = color.new(chart.fg_color, 30), text_size = size.small, tooltip = "Sektor-ETF (Select Sector SPDR) – eigene Näherung aus dem TradingView-Sektor. Gilt nur, falls die Aktie im S&P 500 ist; das liefert Pine nicht.")
 
 // Nur im Datenfenster sichtbar (zur Kontrolle, was der Indikator je Bar sieht)
 plot(weeklyState, "Trend Weekly (1 / -1)", display = display.data_window)

@@ -12,7 +12,7 @@ Pine-Editor von TradingView kopieren → „Zum Chart hinzufügen“. Gedacht f�
 
 - Bollinger-Bänder 10 / 1
 - **All-Time High** als dicke, buttergelbe horizontale Linie mit Label (Gruppe „Zusatzinfos“)
-- Kleine Tabelle unten Mitte: **Sektor | Industrie | (evtl. Sektor-ETF)**, z. B. „Technology Services |
+- Kleine Tabelle oben Mitte: **Sektor | Industrie | (evtl. Sektor-ETF)**, z. B. „Technology Services |
   Packaged Software | (evtl. XLK)“. Sektor und Industrie kommen von TradingView. Der Sektor-ETF (Select Sector
   SPDR) ist eine eigene Näherung (TradingView-Sektoren ≠ GICS) und gilt nur für S&P-500-Aktien – die
   Mitgliedschaft liefert Pine nicht, daher „evtl.“. Index-Mitgliedschaft und Heimatbörse liefert Pine nicht.
