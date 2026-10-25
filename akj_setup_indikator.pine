@@ -249,6 +249,22 @@ riskPct  = hasLvls ? math.abs(entryLvl - slLvl) / entryLvl * 100 : na
 riskOk   = not riskFilter or (riskPct >= riskMin and riskPct <= riskMax)
 
 // ═══════════════════════════════════════════════════════════════════
+// PINE SCREENER – diese Plots MÜSSEN die ersten plot()-Aufrufe im Skript bleiben!
+// Der Screener übernahm „Setup-Status“ nicht mehr, nachdem weitere Plots (MAs) davor standen.
+// Filtert nach Plot-Werten der jüngsten Kerze: offenes, gültiges Setup?
+// 1 = Long, -1 = Short, 0 = keins. Entry erreicht, Trigger weg, Earnings-Sperre oder Risiko außerhalb → 0.
+// ACHTUNG: Im Pine Screener ist earnings.future_time leer – dort greift die Earnings-Sperre NICHT.
+// Bewusst keine Schätzung des Termins (vom Nutzer so entschieden); Treffer im Chart prüfen.
+// ═══════════════════════════════════════════════════════════════════
+scrActive = setupDir != 0 and riskOk
+plot(scrActive ? setupDir : 0, "Setup-Status (1 Long / -1 Short / 0)", display = display.data_window)
+plot(scrActive ? entryLvl : na, "Setup Entry", display = display.data_window)
+plot(scrActive ? slLvl : na, "Setup SL", display = display.data_window)
+plot(setupDir != 0 ? riskPct : na, "Setup Risiko (%)", display = display.data_window)
+// Diagnose: Tage bis zu den nächsten Earnings (leer = TradingView liefert keinen Termin).
+plot(daysToEarn, "Tage bis Earnings", display = display.data_window)
+
+// ═══════════════════════════════════════════════════════════════════
 // DARSTELLUNG – Bollinger-Bänder & Trend
 // ═══════════════════════════════════════════════════════════════════
 plot(showBB ? basis : na, "BB Mid",   color.new(color.gray, 20), bbWidth)
@@ -396,18 +412,6 @@ if symInfoShow and barstate.islast
 plot(weeklyState, "Trend Weekly (1 / -1)", display = display.data_window)
 plot(dailyState, "Trend Daily (1 / -1)", display = display.data_window)
 plot(wrClosed, "Williams %R (abgeschl. Kerze)", display = display.data_window)
-
-// Für den Pine Screener (filtert nach Plot-Werten der jüngsten Kerze): offenes, gültiges Setup?
-// 1 = Long, -1 = Short, 0 = keins. Entry erreicht, Trigger weg, Earnings-Sperre oder Risiko außerhalb → 0.
-// ACHTUNG: Im Pine Screener ist earnings.future_time leer – dort greift die Earnings-Sperre NICHT.
-// Bewusst keine Schätzung des Termins (vom Nutzer so entschieden); Treffer im Chart prüfen.
-scrActive = setupDir != 0 and riskOk
-plot(scrActive ? setupDir : 0, "Setup-Status (1 Long / -1 Short / 0)", display = display.data_window)
-plot(scrActive ? entryLvl : na, "Setup Entry", display = display.data_window)
-plot(scrActive ? slLvl : na, "Setup SL", display = display.data_window)
-plot(setupDir != 0 ? riskPct : na, "Setup Risiko (%)", display = display.data_window)
-// Diagnose: Tage bis zu den nächsten Earnings (leer = TradingView liefert keinen Termin).
-plot(daysToEarn, "Tage bis Earnings", display = display.data_window)
 
 // ═══════════════════════════════════════════════════════════════════
 // STATUS-TABELLE

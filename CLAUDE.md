@@ -35,6 +35,8 @@ und meldet Fehler zurück.
   nicht Heimatbörse. Index-Mitgliedschaft nicht in Pine; Listen im Code vom Nutzer verworfen (zu groß).
 - Pine Screener (Nutzer hat Premium): Plots „Setup-Status (1 Long / -1 Short / 0)“, „Setup Entry“, „Setup SL“
   nur im Datenfenster (display.data_window). Plot-Titel nicht ändern – sonst brechen gespeicherte Screener-Filter.
+  Screener-Plots MÜSSEN die ersten plot()-Aufrufe im Skript bleiben (Screener zeigte „Setup-Status“ nicht mehr,
+  als die MAs davor standen; nach Verschieben an den Anfang wieder da – vom Nutzer bestätigt).
   Im Screener ist earnings.future_time leer (getestet) → Earnings-Sperre greift dort nicht. Nutzer will KEINE
   Schätzung des Termins; Einschränkung ist im README dokumentiert, Treffer werden im Chart geprüft.
 
