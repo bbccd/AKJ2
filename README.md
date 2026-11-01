@@ -37,6 +37,8 @@ Im Pine Screener für M + W die Spielweise umstellen und den Timeframe 1W wähle
   ab der ersten Signalkerze plus Label mit Entry und SL rechts der Kerze – per Setting abschaltbar
 - Grauer Hintergrund = Earnings-Sperrfenster (x Tage vorher bis einschließlich Earnings-Tag/-Woche).
   Den Earnings-Termin selbst zeigt TradingView mit seinem eigenen „E“-Symbol an.
+- Im Daily-Chart schließt eine dicke, dunkelgraue senkrechte Linie das Sperrfenster rechts ab (abschaltbar).
+  Sie steht auf der Earnings-Kerze, bei Zahlen nach Börsenschluss und vergangenen Terminen auf dem Folgetag.
 
 ## Backtest (Strategie)
 

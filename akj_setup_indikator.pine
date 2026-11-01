@@ -39,6 +39,9 @@ riskMaxMW   = input.float(12.0, "max. (%)", minval = 0.0, step = 0.1, group = G_
 
 G_EARN = "Earnings"
 showEarnBg   = input.bool(true, "Sperrfenster grau hinterlegen", group = G_EARN, tooltip = "Grauer Hintergrund vom Beginn des Sperrfensters bis einschließlich Earnings-Tag bzw. -Woche. Vergangene Termine: TradingView liefert sie bei Veröffentlichung nach Börsenschluss erst am Folgetag – dann ist dieser Tag mit grau.")
+earnLineShow = input.bool(true, "Earnings-Linie (nur Daily)", group = G_EARN, inline = "earnline", tooltip = "Senkrechte Linie auf der letzten Kerze des Sperrfensters. Vergangene Termine: auf der Kerze, auf der TradingView die Zahlen liefert – bei Veröffentlichung nach Börsenschluss also der Folgetag.")
+earnLineCol  = input.color(#55555599, "", group = G_EARN, inline = "earnline")
+earnLineW    = input.int(3, "Dicke", minval = 1, maxval = 6, group = G_EARN, inline = "earnline")
 hideNearEarn = input.bool(true, "Keine Signale im Sperrfenster", group = G_EARN)
 earnDaysWD   = input.int(8, "Sperrfenster W + D (Kalendertage vor Earnings)", minval = 0, maxval = 21, group = G_EARN)
 earnDaysMW   = input.int(8, "Sperrfenster M + W (Kalendertage vor Earnings)", minval = 0, maxval = 21, group = G_EARN)
@@ -336,6 +339,19 @@ bgcolor(pastEarnCol(12), offset = -12, editable = false)
 bgcolor(pastEarnCol(13), offset = -13, editable = false)
 bgcolor(pastEarnCol(14), offset = -14, editable = false)
 bgcolor(pastEarnCol(15), offset = -15, editable = false)
+
+// Earnings-Linie im Daily: schließt das Sperrfenster rechts ab (vergangene Termine + kommender Termin im Fenster).
+earnVLine(int t) =>
+    line.new(t, close, t, close * 1.01, xloc = xloc.bar_time, extend = extend.both, color = earnLineCol, width = earnLineW)
+
+if earnLineShow and isDaily and earnBar and barstate.isconfirmed
+    earnVLine(time)
+var line earnNextLine = na
+if barstate.islast
+    line.delete(earnNextLine)
+    earnNextLine := na
+    if earnLineShow and isDaily and earnSoon and not earnBar
+        earnNextLine := earnVLine(int(nextEarn))
 
 // Trendwechsel des übergeordneten TF (W bzw. M; nur für Alerts – im Chart zeigt der Hintergrund die Grenze)
 weeklyUpEdge   = htfState == 1  and htfState[1] != 1
