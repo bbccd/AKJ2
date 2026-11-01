@@ -20,6 +20,11 @@ bbWidth   = input.int(3, "Dicke", minval = 1, maxval = 4, group = G_TREND, inlin
 bgLongCol  = input.color(#1FBFB840, "Farbe Long-Hintergrund", group = G_TREND, inline = "bgcol")
 bgShortCol = input.color(#F0629240, "Short", group = G_TREND, inline = "bgcol")
 bgMode    = input.string("Trigger", "Hintergrund", options = ["Trigger", "Weekly-Trend", "Aus"], group = G_TREND, tooltip = "Trigger: im Trade-Chart (W + D: Daily, M + W: Weekly) nur gefärbt, wenn übergeordneter TF und Trade-TF beide Kauf (Long-Farbe) bzw. beide Verkauf (Short-Farbe) sind, sonst kein Hintergrund. Im Chart des übergeordneten TF (und im Monthly-Chart) zeigt er dessen Trigger. Weekly-Trend: nur der übergeordnete Trend (W bzw. M), wie im alten AKJ2.")
+regNextShow    = input.bool(true, "Regimewechsel auf nächster Kerze ankündigen", group = G_TREND, tooltip = "Steht nach dem Close der jüngsten Kerze fest, dass sich das Regime ändert, wird die Stelle der noch nicht vorhandenen nächsten Kerze in der Farbe des neuen Regimes hinterlegt. Weder Long noch Short: Farbe „Kein Regime“.")
+regNextSame    = input.bool(true, "Auch gleichbleibendes Regime zeigen", group = G_TREND, tooltip = "Bleibt das Regime nach dem Close gleich, wird die Stelle der nächsten Kerze in der normalen Hintergrundfarbe hinterlegt. Ohne Regime bleibt sie leer. Gilt im Daily, Weekly und Monthly.")
+regNextLongCol = input.color(#1FBFB8A0, "Farbe Wechsel Long", group = G_TREND, inline = "regcol")
+regNextShortCol = input.color(#F06292A0, "Short", group = G_TREND, inline = "regcol")
+regNextNoneCol = input.color(#FFB300A0, "Kein Regime", group = G_TREND, inline = "regcol")
 
 G_SETUP = "Setup & Entry"
 enableLong  = input.bool(true, "Long", group = G_SETUP, inline = "dir")
@@ -320,9 +325,26 @@ bgShort = bgMode == "Trigger" ? shortTrend : bgMode == "Weekly-Trend" and htfSta
 bgcolor(bgLong  ? bgLongCol  : na, title = "Long-Trigger Zone")
 bgcolor(bgShort ? bgShortCol : na, title = "Short-Trigger Zone")
 
+// Hintergrund der nächsten Kerze vorab zeigen: Sie existiert noch nicht, darum per offset = 1 rechts der
+// jüngsten Kerze. Sobald sie da ist, übernimmt der normale Hintergrund. Nach Handelsschluss ohne neuen Tick
+// ist die Kerze evtl. noch nicht „confirmed“, darum zusätzlich die Uhrzeit.
+regNow  = bgLong ? 1 : bgShort ? -1 : 0
+regNext = bgMode == "Aus" ? 0 : not tradeChart ? (trigChart ? chartStateNext : 0) : bgMode == "Trigger" ? (longNext ? 1 : shortNext ? -1 : 0) : htfNext
+regBarDone = barstate.islast and (barstate.isconfirmed or timenow >= time_close)
+regShow    = regNextShow and tfValid and bgMode != "Aus" and regBarDone
+regChange  = regShow and regNext != regNow
+regSame    = regShow and regNextSame and regNext == regNow and regNext != 0
+regBgCol   = regChange ? (regNext == 1 ? regNextLongCol : regNext == -1 ? regNextShortCol : regNextNoneCol) : regSame ? (regNext == 1 ? bgLongCol : bgShortCol) : na
+bgcolor(regBgCol, offset = 1, title = "Regimewechsel nächste Kerze")
+
 // Earnings-Sperrfenster grau (über dem Trigger-Hintergrund).
 // Aktueller Termin: direkt. Vergangene Termine: rückwirkend per Offset (max. 16 Kerzen ≈ 21 Kalendertage).
 bgcolor(earnBgOn and earnSoon ? EARN_COL : na, title = "Earnings-Sperrfenster")
+// Nächste Kerze (noch nicht vorhanden): Termin und Dauer geschätzt, Feiertage unberücksichtigt. Grau liegt wie bei
+// den normalen Kerzen über der Regime-Farbe.
+nextBarTime = time + (isWeekly ? 7 : dayofweek == dayofweek.friday ? 3 : 1) * DAY_MS
+earnNextBar = not na(nextEarn) and nextBarTime + (time_close - time) > nextEarn - earnWinMs and nextBarTime <= nextEarn
+bgcolor(regNextShow and regBarDone and earnBgOn and earnNextBar ? EARN_COL : na, offset = 1, title = "Earnings-Sperrfenster nächste Kerze")
 bgcolor(pastEarnCol(0),  offset = 0,   editable = false)
 bgcolor(pastEarnCol(1),  offset = -1,  editable = false)
 bgcolor(pastEarnCol(2),  offset = -2,  editable = false)

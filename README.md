@@ -30,6 +30,11 @@ Im Pine Screener für M + W die Spielweise umstellen und den Timeframe 1W wähle
 - Moving Averages 20 / 50 / 150 / 200 (SMA oder EMA), Farbverlauf Gelb → Orange → Rot von kurz nach lang;
   einzeln und gesamt abschaltbar, Typ, Dicke und Linienart gemeinsam einstellbar
 - Hintergrund: türkis = Long-Trigger, pink = Short-Trigger (Farben einstellbar)
+- **Regimewechsel:** Steht nach dem Close der jüngsten Kerze fest, dass sich das Regime ändert, wird die Stelle
+  der noch nicht vorhandenen nächsten Kerze in der neuen Regime-Farbe hinterlegt; gibt es kein neues Regime,
+  in der Farbe „Kein Regime“ (Daily, Weekly, Monthly; abschaltbar, Farben einstellbar). Bleibt das Regime
+  gleich, zeigt die Stelle die normale Hintergrundfarbe (eigene Checkbox). Liegt die nächste Kerze im
+  Earnings-Sperrfenster, kommt das Earnings-Grau darüber
 - Marker **L** (unter der Kerze) / **S** (darüber) auf der Signalkerze, in der Farbe des Trigger-Hintergrunds;
   beim aktuellen Setup in der Farbe der Hervorhebung
 - Blaue Linie = Entry (Stop-Order), rote Linie = Stop-Loss, solange das Setup offen ist

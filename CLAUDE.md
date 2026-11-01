@@ -58,6 +58,10 @@ und meldet Fehler zurück.
   Chart den Indikator zweimal hinzufügen. Später evtl. „D + 4h“ (Logik noch unbekannt). Strategie: nur W + D.
 - Nur abgeschlossene Kerzen (Tag bzw. Woche) erzeugen Trigger und %R-Signale – keine Signale aus laufenden Kerzen.
   Regime gilt ab der Kerze NACH der Trigger-Kerze (Grenze zwischen beiden), in W und D.
+  Regimewechsel-Ankündigung: Nach Close der jüngsten Kerze Hintergrund per bgcolor offset = 1 auf dem Platz der
+  nächsten Kerze, in der neuen Regime-Farbe bzw. „Kein Regime“; eigene Farben, abschaltbar. Gleichbleibendes Regime:
+  normale Hintergrundfarbe (Checkbox „Auch gleichbleibendes Regime zeigen“), ohne Regime leer. Nächste Kerze im
+  Sperrfenster: Earnings-Grau darüber (wie bei normalen Kerzen; Folgetag-Grau nach Börsenschluss-Zahlen nicht vorhersehbar).
   Ausnahme Setups: Ist der Close der Kerze im Trade-TF selbst der Gegentrigger, entsteht kein Setup/Marker und ein
   offenes Setup endet sofort (longNext/shortNext). Gilt auch für den übergeordneten TF am Periodenende
   (W: Freitag wie in der Strategie, M: nächste Weekly-Kerze beginnt im neuen Monat). Bekannte Lücke: Feiertags-Freitag.
