@@ -173,10 +173,17 @@ wr = ta.wpr(wrLen)
 
 // Der Trigger steht erst mit dem Close der Trigger-Kerze fest. Das Regime gilt deshalb ab der
 // Kerze DANACH (Grenze zwischen Trigger-Kerze und Folgekerze) – auch auf der laufenden Kerze.
-chartState = bbTrendState(bbLen, bbMult)[1]
+chartStateNext = bbTrendState(bbLen, bbMult)
+chartState     = chartStateNext[1]
 wrClosed   = barstate.isconfirmed ? wr : wr[1]
 // Übergeordneter TF (W bzw. M) im Trade-Chart ohne Repainting: nur abgeschlossene Wochen bzw. Monate zählen.
 htfReqState = request.security(syminfo.tickerid, htfTf, bbTrendState(bbLen, bbMult)[1], lookahead = barmerge.lookahead_on)
+// Zustand nach dem Close dieser Kerze, falls die Woche bzw. der Monat damit endet (W + D: Freitag,
+// M + W: nächste Weekly-Kerze beginnt im neuen Monat). Endet die Woche an einem Feiertag vorher, greift das nicht.
+DAY_MS      = 86400000
+htfReqNow   = request.security(syminfo.tickerid, htfTf, bbTrendState(bbLen, bbMult), lookahead = barmerge.lookahead_on)
+htfEnds     = isMW ? month(time + 7 * DAY_MS) != month(time) : dayofweek == dayofweek.friday
+htfNext     = htfEnds ? htfReqNow : htfReqState
 
 // htfState: übergeordneter Trend (im Trigger-Chart dessen eigener Trend), ltfState: Trend des Trade-TF.
 htfState = tradeChart ? htfReqState : trigChart ? chartState : 0
@@ -185,11 +192,13 @@ ltfState = tradeChart ? chartState : 0
 // Trigger laut Guide: übergeordneter TF UND Trade-TF stehen auf Kauf bzw. Verkauf (im Trigger-Chart nur dessen Trend).
 longTrend  = tradeChart ? htfState == 1  and ltfState == 1  : htfState == 1
 shortTrend = tradeChart ? htfState == -1 and ltfState == -1 : htfState == -1
+// Trigger nach dem Close dieser Kerze: Beendet der Close das Regime, entsteht kein Setup mehr.
+longNext   = tradeChart and htfNext == 1  and chartStateNext == 1
+shortNext  = tradeChart and htfNext == -1 and chartStateNext == -1
 
 // ═══════════════════════════════════════════════════════════════════
 // EARNINGS
 // ═══════════════════════════════════════════════════════════════════
-DAY_MS     = 86400000
 earnWinMs  = earnDays * DAY_MS
 nextEarn   = earnings.future_time
 daysToEarn = na(nextEarn) ? na : (nextEarn - time) / DAY_MS
@@ -231,14 +240,17 @@ if setupDir != 0
     else if setupDir == 1 ? high >= entryLvl : low <= entryLvl
         evTrigDir := setupDir
         setupDir  := 0
+// Close dieser Kerze ist der Gegentrigger: Setup endet sofort, nicht erst auf der Folgekerze.
+if barstate.isconfirmed and setupDir != 0 and not (setupDir == 1 ? longNext : shortNext)
+    setupDir := 0
 
 // 2) Neues Setup: Trigger aktiv, rote (Long) / grüne (Short) Kerze, %R-Close im Extrembereich.
 //    Nachziehen laut Guide: Solange das Setup offen ist, zieht jeder weitere Downday (Long)
 //    bzw. Upday (Short) den Entry auf die neue Kerze nach.
 //    SL: liegt immer unter dem tiefsten Tief (Long) bzw. über dem höchsten Hoch (Short) seit der
 //    ersten Signalkerze – auch Kerzen ohne Signal ziehen ihn nach. Er wandert nie zurück in die Bewegung.
-longSig  = tradeChart and inRange and enableLong  and longTrend  and close < open and wr <= wrLongLvl  and not earnBlock
-shortSig = tradeChart and inRange and enableShort and shortTrend and close > open and wr >= wrShortLvl and not earnBlock
+longSig  = tradeChart and inRange and enableLong  and longTrend  and longNext  and close < open and wr <= wrLongLvl  and not earnBlock
+shortSig = tradeChart and inRange and enableShort and shortTrend and shortNext and close > open and wr >= wrShortLvl and not earnBlock
 moveSig  = setupDir == 1 ? close < open : setupDir == -1 ? close > open : false
 
 if barstate.isconfirmed and evTrigDir == 0

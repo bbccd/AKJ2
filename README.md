@@ -144,6 +144,11 @@ flowchart TD
 - Der Abbruch wird vor dem Entry geprüft, weil Trendwechsel, Earnings und Verfall schon zur
   Eröffnung bekannt sind. Man würde die Order dann vor Handelsbeginn löschen.
 - Signale und Trigger entstehen nur aus abgeschlossenen Kerzen.
+- Ist der Close einer Kerze selbst der Gegentrigger (z. B. zweiter Close über dem oberen BB im
+  Short-Regime), entsteht auf ihr kein Setup, und ein offenes Setup endet sofort. Das gilt auch, wenn
+  mit dieser Kerze die Woche bzw. der Monat endet und dadurch der übergeordnete Trend dreht. Ausnahme:
+  Fällt der Freitag auf einen Feiertag, wird das Wochenende nicht erkannt; das Setup endet dann erst
+  auf der Folgekerze.
 - **Risiko-Filter** (Standard an, 2–7 %): Risiko = |Entry − SL| / Entry. Setups außerhalb des Bereichs
   werden nicht angezeigt (Linien, Marker, Hervorhebung, Alerts) und im Screener nicht gelistet. Intern
   läuft das Setup weiter, weil sich das Risiko beim Nachziehen ändert – es kann später wieder in den
