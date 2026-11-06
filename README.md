@@ -101,20 +101,25 @@ stateDiagram-v2
 
 ## Ablauf je Kerze
 
+Dargestellt für die Spielweise **W + D**. Bei **M + W** gilt derselbe Ablauf eine Ebene höher:
+Weekly-Chart mit Monthly- und Weekly-Trend statt Daily-Chart mit Weekly- und Daily-Trend.
+
 ```mermaid
 flowchart TD
     Start(["Neue Kerze"]) --> TF{"Chart-Timeframe?"}
     TF -- "Weekly" --> W1["Weekly-Zustand bis Vorwoche"]
     W1 --> W2["Hintergrund nach<br/>Weekly-Zustand"]
     W2 --> Ende(["Fertig"])
+    TF -- "Monthly" --> MO["Monthly-Zustand bis Vormonat<br/>Hintergrund nach Monthly-Zustand"]
+    MO --> Ende
     TF -- "anderer" --> X["Nur Bollinger-Bänder"]
     X --> Ende
 
     TF -- "Daily" --> D1["Weekly-Zustand der letzten<br/>abgeschlossenen Woche"]
     D1 --> D2["Daily-Zustand bis gestern"]
     D2 --> T{"Weekly und Daily?"}
-    T -- "beide Kauf" --> TL["Long-Trigger<br/>Hintergrund grün"]
-    T -- "beide Verkauf" --> TS["Short-Trigger<br/>Hintergrund orange"]
+    T -- "beide Kauf" --> TL["Long-Trigger<br/>Hintergrund türkis"]
+    T -- "beide Verkauf" --> TS["Short-Trigger<br/>Hintergrund pink"]
     T -- "sonst" --> TN["Kein Trigger<br/>kein Hintergrund"]
     TL --> O
     TS --> O
