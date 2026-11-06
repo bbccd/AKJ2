@@ -21,7 +21,7 @@ Im Pine Screener für M + W die Spielweise umstellen und den Timeframe 1W wähle
 
 **Anzeige im Chart**
 
-- Bollinger-Bänder 10 / 1
+- Bollinger-Bänder 10 / 1, Bereich dazwischen dezent grau gefüllt (abschaltbar, Farbe einstellbar)
 - **All-Time High** als dicke, buttergelbe horizontale Linie mit Label (Gruppe „Zusatzinfos“)
 - Kleine Tabelle oben Mitte: **Sektor | Industrie | (evtl. Sektor-ETF)**, z. B. „Technology Services |
   Packaged Software | (evtl. XLK)“. Sektor und Industrie kommen von TradingView. Der Sektor-ETF (Select Sector
