@@ -210,8 +210,21 @@ shortNext  = tradeChart and htfNext == -1 and chartStateNext == -1
 earnWinMs  = earnDays * DAY_MS
 nextEarn   = earnings.future_time
 daysToEarn = na(nextEarn) ? na : (nextEarn - time) / DAY_MS
-// Kerze liegt im Sperrfenster [Earnings − x Tage, Earnings], wenn sie es zeitlich berührt (Daily wie Weekly).
-earnSoon   = not na(nextEarn) and time_close > nextEarn - earnWinMs and time <= nextEarn
+// Vergleich nach Kalendertagen, nicht nach Uhrzeit: Bei Zahlen vor Börsenbeginn liegt der Termin vor dem
+// Kerzenbeginn (9:30) – der Earnings-Tag fiel sonst aus dem Fenster (Issue #1).
+// Kalendertag (Mitternacht UTC) eines Zeitpunkts in der Börsen-Zeitzone.
+dayOf(int t) =>
+    timestamp("UTC", year(t, syminfo.timezone), month(t, syminfo.timezone), dayofmonth(t, syminfo.timezone), 0, 0)
+// Earnings-Tag als UTC-Datum: stimmt für Termine mit Uhrzeit (vor Börsenbeginn bis abends) wie für reine
+// Datumsangaben (Mitternacht UTC – in New Yorker Zeit wäre das schon der Vortag).
+earnDay    = na(nextEarn) ? int(na) : int(nextEarn) - int(nextEarn) % DAY_MS
+// Liegt der Zeitraum [firstDay, lastDay] (Kalendertage) im Sperrfenster [Earnings-Tag − x Tage, Earnings-Tag]?
+inEarnWin(int firstDay, int lastDay) =>
+    not na(earnDay) and lastDay >= earnDay - earnWinMs and firstDay <= earnDay
+barFirstDay = dayOf(time)
+barLastDay  = dayOf(time_close - 1)   // − 1 ms: falls das Kerzenende als Mitternacht des Folgetags geliefert wird
+// Kerze liegt im Sperrfenster, wenn einer ihrer Tage darin liegt (Daily wie Weekly).
+earnSoon   = inEarnWin(barFirstDay, barLastDay)
 earnBlock  = hideNearEarn and earnSoon
 // Vergangene Earnings: Kerze, auf der TradingView die neuen Zahlen liefert.
 pastEarn   = request.earnings(syminfo.tickerid, earnings.actual, gaps = barmerge.gaps_on, lookahead = barmerge.lookahead_on, ignore_invalid_symbol = true)
@@ -342,8 +355,8 @@ bgcolor(regBgCol, offset = 1, title = "Regimewechsel nächste Kerze")
 bgcolor(earnBgOn and earnSoon ? EARN_COL : na, title = "Earnings-Sperrfenster")
 // Nächste Kerze (noch nicht vorhanden): Termin und Dauer geschätzt, Feiertage unberücksichtigt. Grau liegt wie bei
 // den normalen Kerzen über der Regime-Farbe.
-nextBarTime = time + (isWeekly ? 7 : dayofweek == dayofweek.friday ? 3 : 1) * DAY_MS
-earnNextBar = not na(nextEarn) and nextBarTime + (time_close - time) > nextEarn - earnWinMs and nextBarTime <= nextEarn
+nextBarShift = (isWeekly ? 7 : dayofweek == dayofweek.friday ? 3 : 1) * DAY_MS
+earnNextBar  = inEarnWin(barFirstDay + nextBarShift, barLastDay + nextBarShift)
 bgcolor(regNextShow and regBarDone and earnBgOn and earnNextBar ? EARN_COL : na, offset = 1, title = "Earnings-Sperrfenster nächste Kerze")
 bgcolor(pastEarnCol(0),  offset = 0,   editable = false)
 bgcolor(pastEarnCol(1),  offset = -1,  editable = false)

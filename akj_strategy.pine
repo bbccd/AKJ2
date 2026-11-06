@@ -90,8 +90,16 @@ shortNext   = isDaily and weeklyNext == -1 and dailyNext == -1
 DAY_MS        = 86400000
 earnWinMs     = earnDays * DAY_MS
 nextEarn      = earnings.future_time
-earnBlock     = hideNearEarn and not na(nextEarn) and time_close > nextEarn - earnWinMs and time <= nextEarn
-earnBlockNext = hideNearEarn and not na(nextEarn) and time_close + DAY_MS > nextEarn - earnWinMs and time_close <= nextEarn
+// Vergleich nach Kalendertagen wie im Indikator (Issue #1: Zahlen vor Börsenbeginn).
+dayOf(int t) =>
+    timestamp("UTC", year(t, syminfo.timezone), month(t, syminfo.timezone), dayofmonth(t, syminfo.timezone), 0, 0)
+earnDay       = na(nextEarn) ? int(na) : int(nextEarn) - int(nextEarn) % DAY_MS
+inEarnWin(int firstDay, int lastDay) =>
+    not na(earnDay) and lastDay >= earnDay - earnWinMs and firstDay <= earnDay
+barDay        = dayOf(time)
+nextDayShift  = (dayofweek == dayofweek.friday ? 3 : 1) * DAY_MS
+earnBlock     = hideNearEarn and inEarnWin(barDay, barDay)
+earnBlockNext = hideNearEarn and inEarnWin(barDay + nextDayShift, barDay + nextDayShift)
 
 // ═══════════════════════════════════════════════════════════════════
 // SETUP-LOGIK (aus dem Indikator kopiert; während eines offenen Trades keine Setups)
