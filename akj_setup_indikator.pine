@@ -17,6 +17,8 @@ bbLen     = input.int(10, "BB Länge", minval = 1, group = G_TREND)
 bbMult    = input.float(1.0, "BB Standardabweichung", minval = 0.1, step = 0.1, group = G_TREND)
 showBB    = input.bool(true, "Bollinger-Bänder anzeigen", group = G_TREND, inline = "bb")
 bbWidth   = input.int(3, "Dicke", minval = 1, maxval = 4, group = G_TREND, inline = "bb")
+bbFillOn  = input.bool(true, "Bereich zwischen den Bändern füllen", group = G_TREND, inline = "bbfill", tooltip = "Dezente Füllung, damit sich die Bollinger-Bänder von den Moving Averages abheben. Neutrales Grau mit geringer Deckkraft – funktioniert im hellen und dunklen Chart.")
+bbFillCol = input.color(#787B8614, "", group = G_TREND, inline = "bbfill")
 bgLongCol  = input.color(#1FBFB840, "Farbe Long-Hintergrund", group = G_TREND, inline = "bgcol")
 bgShortCol = input.color(#F0629240, "Short", group = G_TREND, inline = "bgcol")
 bgMode    = input.string("Trigger", "Hintergrund", options = ["Trigger", "Weekly-Trend", "Aus"], group = G_TREND, tooltip = "Trigger: im Trade-Chart (W + D: Daily, M + W: Weekly) nur gefärbt, wenn übergeordneter TF und Trade-TF beide Kauf (Long-Farbe) bzw. beide Verkauf (Short-Farbe) sind, sonst kein Hintergrund. Im Chart des übergeordneten TF (und im Monthly-Chart) zeigt er dessen Trigger. Weekly-Trend: nur der übergeordnete Trend (W bzw. M), wie im alten AKJ2.")
@@ -318,8 +320,10 @@ plot(daysToEarn, "Tage bis Earnings", display = display.data_window)
 // DARSTELLUNG – Bollinger-Bänder & Trend
 // ═══════════════════════════════════════════════════════════════════
 plot(showBB ? basis : na, "BB Mid",   color.new(color.gray, 20), bbWidth)
-plot(showBB ? upper : na, "BB Upper", color.new(color.blue, 40), bbWidth)
-plot(showBB ? lower : na, "BB Lower", color.new(color.red, 40), bbWidth)
+pBbUpper = plot(showBB ? upper : na, "BB Upper", color.new(color.blue, 40), bbWidth)
+pBbLower = plot(showBB ? lower : na, "BB Lower", color.new(color.red, 40), bbWidth)
+// Füllung zwischen den Bändern (Issue #15): sehr leichtes Grau, deutlich schwächer als Trigger- und Earnings-Hintergrund.
+fill(pBbUpper, pBbLower, bbFillOn ? bbFillCol : na, "BB Füllung")
 
 // Moving Averages (unabhängig von der Setup-Logik, nur zur Orientierung)
 maStyle = maStyleIn == "Gestrichelt" ? plot.linestyle_dashed : maStyleIn == "Gepunktet" ? plot.linestyle_dotted : plot.linestyle_solid

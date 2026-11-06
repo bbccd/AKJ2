@@ -40,6 +40,8 @@ und meldet Fehler zurück.
   Hintergrund zeigt standardmäßig den Trigger (beide TFs Kauf = türkis, beide Verkauf = pink, sonst keiner);
   reiner Weekly-Hintergrund wie in AKJ2 per Setting wählbar.
 
+- BB-Füllung zwischen den Bändern (Issue #15): Grau #787B86 mit 8 % Deckkraft (#787B8614), Default an,
+  abschaltbar; bewusst schwächer als Trigger- (25 %) und Earnings-Hintergrund (45 %), hell/dunkel tauglich.
 - Moving Averages im Indikator (nur Anzeige, keine Setup-Logik): 20/50/150/200, SMA/EMA für alle gemeinsam,
   Dicke + Linienart gemeinsam, jede MA einzeln + Paket gesamt abschaltbar. Farben wie TradingView-„MA Ribbon“
   (Gelb → Orange → Rot = kurz → lang); 200er-Rot liegt nahe an SL-Linie/unterem BB – ggf. anpassen.
