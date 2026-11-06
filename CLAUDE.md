@@ -5,6 +5,21 @@ Indikator (später auch Strategie) für TradingView nach dem „Aktien-Kann-Jede
 Kommunikation auf Deutsch. Code kann nicht lokal kompiliert werden – der Nutzer testet in TradingView
 und meldet Fehler zurück.
 
+## Zusammenarbeit (gilt auf jedem Rechner – Nutzer arbeitet am MacBook und am großen Mac)
+- Vor Änderungen oder Erklärungen zur Trading-Logik den Strategie-Guide (PDF oben) SELBST lesen, nicht nur
+  diese Zusammenfassung. Der Nutzer ärgert sich über Rückfragen zu Dingen, die im Guide stehen. Rückfragen nur
+  zu Punkten, die der Guide offen lässt. PDF liegt in iCloud Drive; Read-Tool ohne `pages` (poppler fehlt ggf.).
+- Git: jede Änderung auf eigenem Branch. Committen, pushen und mergen NUR auf ausdrücklichen Wunsch; nach dem
+  Merge gemergte Branches löschen, wenn der Nutzer zustimmt. Zusammengehörige Themen ggf. als getrennte Commits.
+- Grundsatz: bestehende Funktionalität darf sich nicht ungewollt ändern (Defaults beibehalten).
+- GitHub: privates Repo `bbccd/AKJ2` auf dem PRIVATEN Account bbccd, Remote über SSH-Alias
+  `git@github-bbccd:bbccd/AKJ2.git` (Eintrag `Host github-bbccd` in `~/.ssh/config` mit eigenem Key). Niemals den
+  Arbeits-Account bB-0202 (Alias `github-github-haeger`) verwenden. Fehlt der Alias auf einem Rechner: Nutzer fragen,
+  nicht auf einen anderen Account ausweichen.
+- Tests: zurückgestellt; zusammen mit der Library angehen (Einstieg: Regressionstest per Chart-CSV-Export gegen
+  Referenz, später Pine-Testskript mit erfundenen Kerzen für die Sonderfälle aus Bug-Reports). Nicht von selbst anstoßen.
+- Offen, nicht entschieden: Farbe „Kein Regime“ evtl. in „Regime endet“ umbenennen.
+
 ## Dateien
 - `akj_setup_indikator.pine` – aktueller Indikator „AKJ2.0 – Trend & Setup Detector“ (v6).
   Zweck: Aktien schnell auf Setups scannen. Bewusst schlank: kein Trade-Management, keine
@@ -92,7 +107,7 @@ und meldet Fehler zurück.
 - Earnings-Filter wirkt nur auf aktuelle Signale (TradingView liefert nur das nächste Datum) – für Backtest lösen.
   Folge: Nach den Earnings erscheinen beim Neuladen Setups aus dem ehemaligen Fenster. Vom Nutzer als
   akzeptabel/hilfreich bewertet (live war die Sperre aktiv); im README dokumentiert.
-- `strategy()`-Version für Backtests, Positionsgröße aus Risiko-Regeln – in Arbeit (Branch feature/strategy).
+- `strategy()`-Version für Backtests (`akj_strategy.pine`, in `main`), Positionsgröße aus Risiko-Regeln.
   Entscheidung: Setup-Logik zunächst aus dem Indikator KOPIEREN (eigene Datei). Später evtl. Library
   (privat veröffentlicht), dann zuerst nur für die Strategie; Indikator behält vorerst den vollen Code.
   Bei Regeländerungen bis dahin Indikator und Strategie synchron halten!
