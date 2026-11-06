@@ -11,6 +11,11 @@ und meldet Fehler zurück.
   zu Punkten, die der Guide offen lässt. PDF liegt in iCloud Drive; Read-Tool ohne `pages` (poppler fehlt ggf.).
 - Git: jede Änderung auf eigenem Branch. Committen, pushen und mergen NUR auf ausdrücklichen Wunsch; nach dem
   Merge gemergte Branches löschen, wenn der Nutzer zustimmt. Zusammengehörige Themen ggf. als getrennte Commits.
+- Branch-Namen mit Slash (Nutzer-Vorgabe, auf beiden Rechnern einheitlich): `feature/<kurzname>` für neue Funktionen,
+  `fix/<issue-nr>-<kurzname>` für Fehler (z. B. `fix/1-earnings-grau`; Issue-Nr. nur, wenn ein GitHub-Issue existiert,
+  sonst `fix/<kurzname>`), `docs/<kurzname>` für reine Doku. Kurzname englisch oder deutsch, klein, mit Bindestrichen.
+  Nicht `bugfix/` oder Namen ohne Präfix verwenden.
+- GitHub-Issues (Bugs und Ideen) über `gh` lesen (`gh issue list -R bbccd/AKJ2`); `gh` muss als bbccd angemeldet sein.
 - Grundsatz: bestehende Funktionalität darf sich nicht ungewollt ändern (Defaults beibehalten).
 - GitHub: privates Repo `bbccd/AKJ2` auf dem PRIVATEN Account bbccd, Remote über SSH-Alias
   `git@github-bbccd:bbccd/AKJ2.git` (Eintrag `Host github-bbccd` in `~/.ssh/config` mit eigenem Key). Niemals den
