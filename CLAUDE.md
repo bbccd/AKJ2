@@ -76,9 +76,12 @@ und meldet Fehler zurück.
 - Spielweise (Setting, Default „W + D“ – muss sich exakt wie vor Einführung der Spielweisen verhalten!):
   „W + D“: Daily-Chart = Trigger W UND D + Setups; Weekly-Chart nur Weekly-Trigger; Monat spielt hier keine Rolle.
   „M + W“: Weekly-Chart = Trigger M UND W + Setups (gleiche Regeln eine Ebene höher); Daily-Chart nichts.
-  Monthly-Chart: in beiden Spielweisen nur Monthly-Trigger-Hintergrund, KEIN Earnings-Grau (sonst 2 von 3 Monaten grau). Eigene Risiko-Grenzen (W+D 2–7 %,
-  M+W 3–12 %) und Earnings-Fenster (je 8 Tage) pro Spielweise. Ein Skript; für beide Spielweisen im selben
-  Chart den Indikator zweimal hinzufügen. Später evtl. „D + 4h“ (Logik noch unbekannt). Strategie: nur W + D.
+  „D + 4h“ (Issue #14, nicht im Guide, mit Nutzer analog geklärt): 4h-Chart = Trigger D UND 4h + Setups; Daily- und
+  Weekly-Chart nur ihr eigener Trigger. Tagesende = session.islastbar_regular (4h-Chart mit regulären Handelszeiten).
+  Risiko 1–5 %, Earnings 8 Tage, FVGs 4h/D/W/M (4h-Rückschau 1000 Kerzen), Earnings-Linie auch im 4h.
+  Monthly-Chart: in allen Spielweisen nur Monthly-Trigger-Hintergrund, KEIN Earnings-Grau (sonst 2 von 3 Monaten grau). Eigene Risiko-Grenzen (W+D 2–7 %,
+  M+W 3–12 %, D+4h 1–5 %) und Earnings-Fenster (je 8 Tage) pro Spielweise. Ein Skript; für beide Spielweisen im selben
+  Chart den Indikator zweimal hinzufügen. Strategie: nur W + D.
 - Nur abgeschlossene Kerzen (Tag bzw. Woche) erzeugen Trigger und %R-Signale – keine Signale aus laufenden Kerzen.
   Regime gilt ab der Kerze NACH der Trigger-Kerze (Grenze zwischen beiden), in W und D.
   Regimewechsel-Ankündigung: Nach Close der jüngsten Kerze Hintergrund per bgcolor offset = 1 auf dem Platz der

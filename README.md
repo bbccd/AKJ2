@@ -13,11 +13,16 @@ Pine-Editor von TradingView kopieren → „Zum Chart hinzufügen“.
 |---|---|---|
 | **W + D** (Standard) | Daily: Weekly UND Daily | Weekly: Weekly-Trigger |
 | **M + W** | Weekly: Monthly UND Weekly | – |
+| **D + 4h** | 4h: Daily UND 4h | Daily: Daily-Trigger, Weekly: Weekly-Trigger |
 
-Das Monthly-Chart zeigt in beiden Spielweisen den Monthly-Trigger (ohne Earnings-Grau). Risiko-Grenzen (W + D 2–7 %,
-M + W 3–12 %) und Earnings-Sperrfenster sind je Spielweise einstellbar. Für beide Spielweisen im
-selben Chart den Indikator zweimal hinzufügen (bei einer Instanz ggf. Hintergrund, BB und MAs aus).
-Im Pine Screener für M + W die Spielweise umstellen und den Timeframe 1W wählen.
+Das Monthly-Chart zeigt in allen Spielweisen den Monthly-Trigger (ohne Earnings-Grau). Risiko-Grenzen (W + D 2–7 %,
+M + W 3–12 %, D + 4h 1–5 %) und Earnings-Sperrfenster sind je Spielweise einstellbar. Für mehrere Spielweisen im
+selben Chart den Indikator mehrfach hinzufügen (bei einer Instanz ggf. Hintergrund, BB und MAs aus).
+Im Pine Screener die Spielweise in den Indikator-Einstellungen umstellen und den passenden Timeframe wählen
+(M + W: 1W, D + 4h: 4h).
+
+D + 4h: 4h-Chart mit regulären Handelszeiten verwenden (keine Extended Hours). Der Tag endet mit der letzten
+4h-Kerze der regulären Sitzung; danach steht der neue Daily-Trend fest (wie der Freitag in W + D).
 
 **Anzeige im Chart**
 
@@ -102,7 +107,8 @@ stateDiagram-v2
 ## Ablauf je Kerze
 
 Dargestellt für die Spielweise **W + D**. Bei **M + W** gilt derselbe Ablauf eine Ebene höher:
-Weekly-Chart mit Monthly- und Weekly-Trend statt Daily-Chart mit Weekly- und Daily-Trend.
+Weekly-Chart mit Monthly- und Weekly-Trend statt Daily-Chart mit Weekly- und Daily-Trend. Bei **D + 4h**
+eine Ebene tiefer: 4h-Chart mit Daily- und 4h-Trend.
 
 ```mermaid
 flowchart TD
@@ -169,7 +175,8 @@ flowchart TD
   ein ungefülltes gegenläufiges Fair Value Gap (Long: bärisch, Short: bullisch) den Bereich zwischen Entry
   und Ziel bei CRV 1:1 auch nur teilweise überlappt. FVG = Lücke über drei Kerzen (bullisch: Tief > Hoch
   von vor zwei Kerzen, bärisch spiegelbildlich); es zählt, bis der Kurs die Lücke komplett gefüllt hat.
-  Beachtet werden Daily, Weekly und Monthly (in M + W: Weekly und Monthly), je mit eigener Rückschau in
+  Beachtet werden Daily, Weekly und Monthly (in M + W: Weekly und Monthly, in D + 4h zusätzlich 4h),
+  je mit eigener Rückschau in
   Kerzen. Wirkung wie beim Risiko-Filter (nicht angezeigt, intern weiter). Zur Kontrolle lassen sich die
   offenen FVGs als Kästen einblenden. Höhere Zeiteinheiten werden nur so weit beachtet, wie der Chart
   Historie geladen hat; im Pine Screener ist die geladene Historie evtl. kürzer.
