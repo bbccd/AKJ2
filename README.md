@@ -165,6 +165,16 @@ flowchart TD
   werden nicht angezeigt (Linien, Marker, Hervorhebung, Alerts) und im Screener nicht gelistet. Intern
   läuft das Setup weiter, weil sich das Risiko beim Nachziehen ändert – es kann später wieder in den
   Bereich laufen und erscheint dann. Das Label des aktuellen Setups zeigt das Risiko als „R: 2.3 %“.
+- **FVG-Filter** (Gruppe „Fair Value Gaps“, Standard **aus**): Ist er an, gilt ein Setup als ungültig, wenn
+  ein ungefülltes gegenläufiges Fair Value Gap (Long: bärisch, Short: bullisch) den Bereich zwischen Entry
+  und Ziel bei CRV 1:1 auch nur teilweise überlappt. FVG = Lücke über drei Kerzen (bullisch: Tief > Hoch
+  von vor zwei Kerzen, bärisch spiegelbildlich); es zählt, bis der Kurs die Lücke komplett gefüllt hat.
+  Beachtet werden Daily, Weekly und Monthly (in M + W: Weekly und Monthly), je mit eigener Rückschau in
+  Kerzen. Wirkung wie beim Risiko-Filter (nicht angezeigt, intern weiter). Zur Kontrolle lassen sich die
+  offenen FVGs als Kästen einblenden. Höhere Zeiteinheiten werden nur so weit beachtet, wie der Chart
+  Historie geladen hat; im Pine Screener ist die geladene Historie evtl. kürzer.
+  Screener-Spalte „FVG im Gewinnbereich (1 / 0)“ wird immer berechnet, auch bei ausgeschaltetem Filter:
+  „Setup-Status = 1“ plus „FVG im Gewinnbereich = 0“ zeigt nur Long-Setups ohne FVG im Weg.
 - **Earnings-Sperre wirkt nur für den nächsten Termin.** TradingView liefert in Pine nur den nächsten
   Earnings-Termin, nicht die vergangenen im Voraus. Vergangene Sperrfenster werden zwar grau
   hinterlegt, sperren aber keine Signale. Deshalb gilt:

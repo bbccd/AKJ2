@@ -103,6 +103,13 @@ und meldet Fehler zurück.
 - Risiko-Filter (Setting, Default an): Risiko % = |Entry − SL| / Entry, nur Setups mit 2–7 % anzeigen/im Screener.
   Filtert nur die Anzeige (Linien, Marker, Hervorhebung, Alerts, Screener), Setup-Zustand läuft intern weiter.
   Label des aktuellen Setups zeigt unten „R: 2.3 %“ (eine Nachkommastelle).
+- FVG-Filter (Issue #18, mit Nutzer geklärt; nicht im Guide): Setting, Default AUS (Nutzer: muss abschaltbar sein).
+  Long ungültig bei ungefülltem BÄRISCHEM FVG, Short bei bullischem, das [Entry, Ziel 1:1] irgendwie überlappt.
+  FVG zählt, bis komplett gefüllt (teilweise gefüllt → Restlücke). Wirkung wie Risiko-Filter (setupOk = riskOk
+  und kein FVG). TFs D/W/M je mit Rückschau in Kerzen (M + W: W/M). HTF-FVGs per request.security ([1] +
+  lookahead) aus abgeschlossenen Kerzen, gefüllt mit Chart-Kerzen; nur ungefüllte werden gemerkt. Optionale
+  Kontroll-Kästen. FVGs werden immer berechnet (auch Filter aus), damit die Screener-Spalte „FVG im
+  Gewinnbereich (1 / 0)“ unabhängig vom Filter gefüllt ist. Strategie noch NICHT synchronisiert (erst nach Test im Indikator).
 - Risiko: 0,5–1 % (normal) bzw. 1–2 % (stark) des max. akzeptierten Depot-Drawdowns pro Trade.
 
 ## Offene Punkte / Refinement
