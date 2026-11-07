@@ -173,6 +173,8 @@ flowchart TD
   Kerzen. Wirkung wie beim Risiko-Filter (nicht angezeigt, intern weiter). Zur Kontrolle lassen sich die
   offenen FVGs als Kästen einblenden. Höhere Zeiteinheiten werden nur so weit beachtet, wie der Chart
   Historie geladen hat; im Pine Screener ist die geladene Historie evtl. kürzer.
+  Screener-Spalte „FVG im Gewinnbereich (1 / 0)“ wird immer berechnet, auch bei ausgeschaltetem Filter:
+  „Setup-Status = 1“ plus „FVG im Gewinnbereich = 0“ zeigt nur Long-Setups ohne FVG im Weg.
 - **Earnings-Sperre wirkt nur für den nächsten Termin.** TradingView liefert in Pine nur den nächsten
   Earnings-Termin, nicht die vergangenen im Voraus. Vergangene Sperrfenster werden zwar grau
   hinterlegt, sperren aber keine Signale. Deshalb gilt:

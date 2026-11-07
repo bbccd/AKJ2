@@ -108,7 +108,8 @@ und meldet Fehler zurück.
   FVG zählt, bis komplett gefüllt (teilweise gefüllt → Restlücke). Wirkung wie Risiko-Filter (setupOk = riskOk
   und kein FVG). TFs D/W/M je mit Rückschau in Kerzen (M + W: W/M). HTF-FVGs per request.security ([1] +
   lookahead) aus abgeschlossenen Kerzen, gefüllt mit Chart-Kerzen; nur ungefüllte werden gemerkt. Optionale
-  Kontroll-Kästen. Strategie noch NICHT synchronisiert (erst nach Test im Indikator).
+  Kontroll-Kästen. FVGs werden immer berechnet (auch Filter aus), damit die Screener-Spalte „FVG im
+  Gewinnbereich (1 / 0)“ unabhängig vom Filter gefüllt ist. Strategie noch NICHT synchronisiert (erst nach Test im Indikator).
 - Risiko: 0,5–1 % (normal) bzw. 1–2 % (stark) des max. akzeptierten Depot-Drawdowns pro Trade.
 
 ## Offene Punkte / Refinement

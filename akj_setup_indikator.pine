@@ -330,12 +330,13 @@ riskPct  = hasLvls ? math.abs(entryLvl - slLvl) / entryLvl * 100 : na
 riskOk   = not riskFilter or (riskPct >= riskMin and riskPct <= riskMax)
 
 // ═══════════════════════════════════════════════════════════════════
-// FAIR VALUE GAPS (Issue #18) – nur im Trade-Chart, nur wenn Filter oder Anzeige an.
+// FAIR VALUE GAPS (Issue #18) – nur im Trade-Chart. Immer berechnet (auch bei Filter aus), damit die
+// Screener-Spalte „FVG im Gewinnbereich (1 / 0)“ unabhängig von der Filter-Einstellung gefüllt ist.
 // Gemerkt werden nur ungefüllte FVGs (meist wenige) → keine Performance-Probleme trotz langer Rückschau.
 // Höhere TFs: Werte der zuletzt ABGESCHLOSSENEN Kerze ([1] + lookahead, kein Repainting); ein Weekly-FVG
 // steht also ab der ersten Kerze der Folgewoche fest. Gefüllt wird mit den Kerzen des Charts.
 // ═══════════════════════════════════════════════════════════════════
-fvgOn     = tradeChart and (fvgFilter or fvgShow)
+fvgOn     = tradeChart
 chartTfId = isDaily ? 0 : isWeekly ? 1 : 2
 [wH, wL, wH2, wL2, wT2, wT] = request.security(syminfo.tickerid, "W", [high[1], low[1], high[3], low[3], time[3], time[1]], lookahead = barmerge.lookahead_on)
 [mH, mL, mH2, mL2, mT2, mT] = request.security(syminfo.tickerid, "M", [high[1], low[1], high[3], low[3], time[3], time[1]], lookahead = barmerge.lookahead_on)
@@ -383,7 +384,7 @@ if fvgOn and barstate.isconfirmed
 
 // Liegt ein gegenläufiges FVG im Gewinnbereich [Entry, Ziel 1:1]? (jede Überlappung zählt)
 bool fvgHitCalc = false
-if fvgFilter and setupDir != 0 and array.size(fvgList) > 0
+if setupDir != 0 and array.size(fvgList) > 0
     r   = math.abs(entryLvl - slLvl)
     zLo = setupDir == 1 ? entryLvl : entryLvl - r
     zHi = setupDir == 1 ? entryLvl + r : entryLvl
@@ -392,8 +393,9 @@ if fvgFilter and setupDir != 0 and array.size(fvgList) > 0
             fvgHitCalc := true
             break
 // Kerze, auf der der Entry erreicht wird: Zustand des Setups von der Vorkerze (als die Order lag).
-fvgHit  = setupDir != 0 ? fvgHitCalc : evTrigDir != 0 ? fvgHitCalc[1] : false
-setupOk = riskOk and not fvgHit
+fvgInZone = setupDir != 0 ? fvgHitCalc : evTrigDir != 0 ? fvgHitCalc[1] : false   // gemessen, immer
+fvgHit    = fvgFilter and fvgInZone                                                // wirkt nur mit Filter
+setupOk   = riskOk and not fvgHit
 
 // ═══════════════════════════════════════════════════════════════════
 // PINE SCREENER – diese Plots MÜSSEN die ersten plot()-Aufrufe im Skript bleiben!
@@ -592,7 +594,7 @@ plot(htfState, "Trend übergeordnet W bzw. M (1 / -1)", display = display.data_w
 plot(ltfState, "Trend Trade-TF D bzw. W (1 / -1)", display = display.data_window)
 plot(wrClosed, "Williams %R (abgeschl. Kerze)", display = display.data_window)
 plot(fvgOn ? array.size(fvgList) : na, "Offene FVGs (Anzahl)", display = display.data_window)
-plot(fvgFilter and hasLvls ? (fvgHit ? 1 : 0) : na, "FVG im Gewinnbereich (1 / 0)", display = display.data_window)
+plot(fvgOn and hasLvls ? (fvgInZone ? 1 : 0) : na, "FVG im Gewinnbereich (1 / 0)", display = display.data_window)
 
 // ═══════════════════════════════════════════════════════════════════
 // ZUSATZINFOS – Offene FVGs als Kästen (nur zur Kontrolle, Default aus), jüngste zuerst, max. 400
