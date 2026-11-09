@@ -57,7 +57,7 @@ fvgUseW   = input.bool(true, "Weekly", group = G_FVG, inline = "fvgW")
 fvgLbW    = input.int(520, "Rückschau (Kerzen)", minval = 1, maxval = 5000, group = G_FVG, inline = "fvgW")
 fvgUseM   = input.bool(true, "Monthly", group = G_FVG, inline = "fvgM")
 fvgLbM    = input.int(240, "Rückschau (Kerzen)", minval = 1, maxval = 5000, group = G_FVG, inline = "fvgM")
-fvgShow   = input.bool(false, "Offene FVGs anzeigen (zur Kontrolle)", group = G_FVG, inline = "fvgshow", tooltip = "Zeichnet alle noch nicht gefüllten FVGs der gewählten Zeiteinheiten als Kasten (Beschriftung 4h / D / W / M), max. 400. Nur im Trade-Chart.")
+fvgShow   = input.bool(false, "Offene FVGs anzeigen (zur Kontrolle)", group = G_FVG, inline = "fvgshow", tooltip = "Zeichnet alle noch nicht gefüllten FVGs der gewählten Zeiteinheiten als Kasten (Beschriftung 4h / D / W / M), max. 400 (die nächsten am Kurs; sind es mehr, erscheint unten rechts ein Hinweis). Nur im Trade-Chart.")
 fvgBullCol = input.color(#4CAF5026, "Bullisch", group = G_FVG, inline = "fvgshow")
 fvgBearCol = input.color(#FF525226, "Bärisch", group = G_FVG, inline = "fvgshow")
 
@@ -175,16 +175,84 @@ sectorEtf(string sec, string ind) =>
 type Fvg
     float top
     float bot
-    int   dir    // 1 = bullisch, -1 = bärisch
-    int   tfId   // 0 = 4h, 1 = Daily, 2 = Weekly, 3 = Monthly
-    int   idx    // Nummer der jüngsten der drei Kerzen in ihrem TF (für die Rückschau)
-    int   t      // Startzeit der ältesten der drei Kerzen (nur für die Anzeige)
+    int   dir            // 1 = bullisch, -1 = bärisch
+    int   tfId           // 0 = 4h, 1 = Daily, 2 = Weekly, 3 = Monthly
+    int   idx            // Nummer der jüngsten der drei Kerzen in ihrem TF (für die Rückschau)
+    int   t              // Startzeit der ältesten der drei Kerzen (nur für die Anzeige)
+    bool  dead = false   // gefüllt oder Rückschau abgelaufen (wird aus den Listen nach und nach entfernt)
 
-fvgAdd(array<Fvg> list, int tfId, float h0, float l0, float h2, float l2, int t2, int idx) =>
+// Performance (Issue #21): FVGs liegen in zwei SORTIERTEN Listen – bullisch absteigend nach top (nächstes unter
+// dem Kurs zuerst), bärisch aufsteigend nach bot (nächstes über dem Kurs zuerst). Füllen und Treffer-Prüfung
+// brechen ab, sobald ein FVG außer Reichweite liegt, statt jede Kerze alle FVGs zu durchlaufen.
+fvgInsert(array<Fvg> list, Fvg f) =>
+    n = list.size()
+    int i = 0
+    if f.dir == 1
+        while i < n and list.get(i).top > f.top
+            i += 1
+    else
+        while i < n and list.get(i).bot < f.bot
+            i += 1
+    list.insert(i, f)
+
+// Neues FVG anlegen (falls Lücke): in die sortierte Liste und in die Ablauf-Warteschlange seines TF. Rückgabe 1/0.
+fvgAdd(array<Fvg> bull, array<Fvg> bear, array<Fvg> queue, int tfId, float h0, float l0, float h2, float l2, int t2, int idx) =>
+    Fvg f = na
     if l0 > h2
-        array.push(list, Fvg.new(l0, h2, 1, tfId, idx, t2))
+        f := Fvg.new(l0, h2, 1, tfId, idx, t2)
     else if h0 < l2
-        array.push(list, Fvg.new(l2, h0, -1, tfId, idx, t2))
+        f := Fvg.new(l2, h0, -1, tfId, idx, t2)
+    if not na(f)
+        fvgInsert(f.dir == 1 ? bull : bear, f)
+        queue.push(f)
+    na(f) ? 0 : 1
+
+// Rückschau: Warteschlange je TF in Entstehungsreihenfolge – vorne liegt immer das älteste FVG, also reicht es,
+// vorne abzuarbeiten, bis eines noch nicht abgelaufen ist. Rückgabe: Anzahl neu abgelaufener FVGs.
+fvgExpire(array<Fvg> queue, int cnt, int lb) =>
+    int killed = 0
+    while queue.size() > 0
+        f = queue.first()
+        if f.dead
+            queue.shift()
+        else if cnt - f.idx > lb
+            f.dead := true
+            queue.shift()
+            killed += 1
+        else
+            break
+    killed
+
+// Füllen mit der aktuellen Kerze: nur die vorderen FVGs der Liste können betroffen sein. Rückgabe: Anzahl gefüllter.
+fvgFill(array<Fvg> list, bool bull, float lo, float hi) =>
+    int filled = 0
+    int i = 0
+    while i < list.size()
+        f = list.get(i)
+        if f.dead
+            list.remove(i)
+        else if bull ? lo < f.top : hi > f.bot
+            if bull ? lo <= f.bot : hi >= f.top
+                f.dead := true
+                list.remove(i)
+                filled += 1
+            else
+                if bull
+                    f.top := lo
+                else
+                    f.bot := hi
+                i += 1
+        else
+            break
+    filled
+
+// Erledigte FVGs aus einer Liste entfernen (nur gelegentlich nötig, damit die Listen nicht wachsen).
+fvgCompact(array<Fvg> list) =>
+    n = list.size()
+    if n > 0
+        for i = n - 1 to 0
+            if list.get(i).dead
+                list.remove(i)
 
 trendTxt(int s) => s == 1 ? "UP ▲" : s == -1 ? "DOWN ▼" : "–"
 trendCol(int s) => s == 1 ? color.green : s == -1 ? color.red : color.gray
@@ -223,13 +291,28 @@ wr = ta.wpr(wrLen)
 chartStateNext = bbTrendState(bbLen, bbMult)
 chartState     = chartStateNext[1]
 wrClosed   = barstate.isconfirmed ? wr : wr[1]
-// Übergeordneter TF (W bzw. M) im Trade-Chart ohne Repainting: nur abgeschlossene Wochen bzw. Monate zählen.
-htfReqState = request.security(syminfo.tickerid, htfTf, bbTrendState(bbLen, bbMult)[1], lookahead = barmerge.lookahead_on)
+// Höhere TFs – Performance (Issue #21): EIN Abruf je Zeiteinheit (D, W, M) liefert alles, was gebraucht wird
+// (Trend, FVG-Kerzen, ATH), statt mehrerer Einzelabrufe. Ist die Zeiteinheit nicht höher als das Chart, wird
+// das Chart selbst abgefragt ("") – sonst müsste TradingView z. B. im Weekly-Chart alle Daily-Kerzen laden.
+// Werte mit [1] + lookahead = zuletzt ABGESCHLOSSENE Kerze (kein Repainting); s0 = Zustand inkl. laufender Kerze.
+htfData() =>
+    s = bbTrendState(bbLen, bbMult)
+    [s[1], s, high[1], low[1], high[3], low[3], time[3], time[1], ta.max(high)[1]]
+chartSec = timeframe.in_seconds()
+tfD = chartSec < timeframe.in_seconds("D") ? "D" : ""
+tfW = chartSec < timeframe.in_seconds("W") ? "W" : ""
+tfM = chartSec < timeframe.in_seconds("M") ? "M" : ""
+[dS1, dS0, dH, dL, dH2, dL2, dT2, dT, dAth] = request.security(syminfo.tickerid, tfD, htfData(), lookahead = barmerge.lookahead_on)
+[wS1, wS0, wH, wL, wH2, wL2, wT2, wT, wAth] = request.security(syminfo.tickerid, tfW, htfData(), lookahead = barmerge.lookahead_on)
+[mS1, mS0, mH, mL, mH2, mL2, mT2, mT, mAth] = request.security(syminfo.tickerid, tfM, htfData(), lookahead = barmerge.lookahead_on)
+
+// Übergeordneter TF (W, M bzw. D) im Trade-Chart ohne Repainting: nur abgeschlossene Kerzen zählen.
+htfReqState = isMW ? mS1 : isDH ? dS1 : wS1
 // Zustand nach dem Close dieser Kerze, falls die Woche bzw. der Monat bzw. der Tag damit endet (W + D: Freitag,
 // M + W: nächste Weekly-Kerze beginnt im neuen Monat, D + 4h: letzte 4h-Kerze der regulären Sitzung).
 // Endet die Woche an einem Feiertag vorher, greift das nicht.
 DAY_MS      = 86400000
-htfReqNow   = request.security(syminfo.tickerid, htfTf, bbTrendState(bbLen, bbMult), lookahead = barmerge.lookahead_on)
+htfReqNow   = isMW ? mS0 : isDH ? dS0 : wS0
 htfEnds     = isMW ? month(time + 7 * DAY_MS) != month(time) : isDH ? session.islastbar_regular : dayofweek == dayofweek.friday
 htfNext     = htfEnds ? htfReqNow : htfReqState
 
@@ -347,67 +430,77 @@ riskOk   = not riskFilter or (riskPct >= riskMin and riskPct <= riskMax)
 // ═══════════════════════════════════════════════════════════════════
 fvgOn     = tradeChart
 chartTfId = is4h ? 0 : isDaily ? 1 : isWeekly ? 2 : 3
-[dH, dL, dH2, dL2, dT2, dT] = request.security(syminfo.tickerid, "D", [high[1], low[1], high[3], low[3], time[3], time[1]], lookahead = barmerge.lookahead_on)
-[wH, wL, wH2, wL2, wT2, wT] = request.security(syminfo.tickerid, "W", [high[1], low[1], high[3], low[3], time[3], time[1]], lookahead = barmerge.lookahead_on)
-[mH, mL, mH2, mL2, mT2, mT] = request.security(syminfo.tickerid, "M", [high[1], low[1], high[3], low[3], time[3], time[1]], lookahead = barmerge.lookahead_on)
+// Kerzen der höheren TFs kommen aus den gemeinsamen Abrufen oben (Abschnitt INDIKATOREN & TREND).
 dNew = not na(dT) and (na(dT[1]) or dT != dT[1])     // neue Daily-Kerze abgeschlossen
 wNew = not na(wT) and (na(wT[1]) or wT != wT[1])     // neue Weekly-Kerze abgeschlossen
 mNew = not na(mT) and (na(mT[1]) or mT != mT[1])     // neue Monthly-Kerze abgeschlossen
 
-var fvgList = array.new<Fvg>()
+var fvgBull  = array.new<Fvg>()   // bullisch, absteigend nach top
+var fvgBear  = array.new<Fvg>()   // bärisch, aufsteigend nach bot
+var fvgQ4h   = array.new<Fvg>()   // Ablauf-Warteschlangen je TF (Entstehungsreihenfolge)
+var fvgQD    = array.new<Fvg>()
+var fvgQW    = array.new<Fvg>()
+var fvgQM    = array.new<Fvg>()
+var int fvgAlive = 0              // Anzahl offener FVGs
 var int dCnt = 0
 var int wCnt = 0
 var int mCnt = 0
-FVG_MAX = 1500   // Sicherheitsgrenze
+FVG_MAX = 1500   // ab dieser Listenlänge erledigte Einträge aufräumen
 
 if fvgOn and barstate.isconfirmed
     // 1) Neue FVGs der höheren TFs
     if dNew
         dCnt += 1
         if chartTfId < 1 and fvgUseD and not na(dH2)
-            fvgAdd(fvgList, 1, dH, dL, dH2, dL2, dT2, dCnt)
+            fvgAlive += fvgAdd(fvgBull, fvgBear, fvgQD, 1, dH, dL, dH2, dL2, dT2, dCnt)
     if wNew
         wCnt += 1
         if chartTfId < 2 and fvgUseW and not na(wH2)
-            fvgAdd(fvgList, 2, wH, wL, wH2, wL2, wT2, wCnt)
+            fvgAlive += fvgAdd(fvgBull, fvgBear, fvgQW, 2, wH, wL, wH2, wL2, wT2, wCnt)
     if mNew
         mCnt += 1
         if chartTfId < 3 and fvgUseM and not na(mH2)
-            fvgAdd(fvgList, 3, mH, mL, mH2, mL2, mT2, mCnt)
-    // 2) Rückschau abgelaufen oder komplett gefüllt → entfernen; teilweise gefüllt → Rest verkleinern
-    n = array.size(fvgList)
-    if n > 0
-        for i = n - 1 to 0
-            f   = array.get(fvgList, i)
-            age = f.tfId == chartTfId ? bar_index - f.idx : f.tfId == 1 ? dCnt - f.idx : f.tfId == 2 ? wCnt - f.idx : mCnt - f.idx
-            lb  = f.tfId == 0 ? fvgLb4h : f.tfId == 1 ? fvgLbD : f.tfId == 2 ? fvgLbW : fvgLbM
-            bool drop = age > lb
-            if not drop
-                if f.dir == 1 and low < f.top
-                    f.top := low
-                    drop := low <= f.bot
-                else if f.dir == -1 and high > f.bot
-                    f.bot := high
-                    drop := high >= f.top
-            if drop
-                array.remove(fvgList, i)
-    // 3) Neues FVG im Chart-TF (diese Kerze ist die jüngste der drei)
+            fvgAlive += fvgAdd(fvgBull, fvgBear, fvgQM, 3, mH, mL, mH2, mL2, mT2, mCnt)
+    // 2) Rückschau abgelaufen → erledigt (Alter wie bisher: Chart-TF in Kerzen, höhere TFs über ihre Zähler)
+    fvgAlive -= fvgExpire(fvgQ4h, bar_index, fvgLb4h)
+    fvgAlive -= fvgExpire(fvgQD, chartTfId == 1 ? bar_index : dCnt, fvgLbD)
+    fvgAlive -= fvgExpire(fvgQW, chartTfId == 2 ? bar_index : wCnt, fvgLbW)
+    fvgAlive -= fvgExpire(fvgQM, mCnt, fvgLbM)
+    // 3) Komplett gefüllt → erledigt; teilweise gefüllt → Rest verkleinern (nur die vorderen FVGs betroffen)
+    fvgAlive -= fvgFill(fvgBull, true, low, high)
+    fvgAlive -= fvgFill(fvgBear, false, low, high)
+    // 4) Neues FVG im Chart-TF (diese Kerze ist die jüngste der drei)
     chartUse = chartTfId == 0 ? fvgUse4h : chartTfId == 1 ? fvgUseD : fvgUseW
+    chartQ   = chartTfId == 0 ? fvgQ4h : chartTfId == 1 ? fvgQD : fvgQW
     if chartUse and bar_index >= 2
-        fvgAdd(fvgList, chartTfId, high, low, high[2], low[2], time[2], bar_index)
-    while array.size(fvgList) > FVG_MAX
-        array.shift(fvgList)
+        fvgAlive += fvgAdd(fvgBull, fvgBear, chartQ, chartTfId, high, low, high[2], low[2], time[2], bar_index)
+    if fvgBull.size() > FVG_MAX
+        fvgCompact(fvgBull)
+    if fvgBear.size() > FVG_MAX
+        fvgCompact(fvgBear)
 
 // Liegt ein gegenläufiges FVG im Gewinnbereich [Entry, Ziel 1:1]? (jede Überlappung zählt)
+// Sortierte Listen: Long prüft bärische ab dem nächsten über dem Kurs, Short bullische ab dem nächsten darunter;
+// Abbruch, sobald ein FVG jenseits der Zone beginnt.
 bool fvgHitCalc = false
-if setupDir != 0 and array.size(fvgList) > 0
+if setupDir != 0 and fvgAlive > 0
     r   = math.abs(entryLvl - slLvl)
     zLo = setupDir == 1 ? entryLvl : entryLvl - r
     zHi = setupDir == 1 ? entryLvl + r : entryLvl
-    for f in fvgList
-        if f.dir == -setupDir and f.bot < zHi and f.top > zLo
-            fvgHitCalc := true
-            break
+    if setupDir == 1
+        for f in fvgBear
+            if f.bot >= zHi
+                break
+            if not f.dead and f.top > zLo
+                fvgHitCalc := true
+                break
+    else
+        for f in fvgBull
+            if f.top <= zLo
+                break
+            if not f.dead and f.bot < zHi
+                fvgHitCalc := true
+                break
 // Kerze, auf der der Entry erreicht wird: Zustand des Setups von der Vorkerze (als die Order lag).
 fvgInZone = setupDir != 0 ? fvgHitCalc : evTrigDir != 0 ? fvgHitCalc[1] : false   // gemessen, immer
 fvgHit    = fvgFilter and fvgInZone                                                // wirkt nur mit Filter
@@ -569,10 +662,11 @@ if barstate.islast
 // Monatsdaten liefern die gesamte Historie (auch vor den im Chart geladenen Kerzen),
 // die Chart-Kerzen ergänzen den laufenden Monat.
 // ═══════════════════════════════════════════════════════════════════
-athMonthly = request.security(syminfo.tickerid, "M", ta.max(high)[1], lookahead = barmerge.lookahead_on)
+athMonthly = mAth   // aus dem gemeinsamen Monats-Abruf (Abschnitt INDIKATOREN & TREND)
 athChart   = ta.max(high)
 ath        = math.max(nz(athMonthly, athChart), athChart)
 
+ATH_LBL_OFFSET = 5   // Kerzen rechts der jüngsten Kerze
 var line  athLine = na
 var label athLbl  = na
 if barstate.islast
@@ -582,9 +676,10 @@ if barstate.islast
     athLbl  := na
     if athShow
         athLine := line.new(bar_index - 1, ath, bar_index, ath, extend = extend.both, color = athCol, width = athWidth)
-        // Label am linken Rand des sichtbaren Bereichs (rechts steht ggf. das Label des aktuellen Setups).
-        // Spitze zwangsläufig links: Pine richtet an der Spitze aus, mit Spitze rechts läge der Kasten außerhalb.
-        athLbl  := label.new(chart.left_visible_bar_time, ath, "All-Time High " + str.tostring(ath, format.mintick), xloc = xloc.bar_time, style = label.style_label_left, color = athCol, textcolor = color.black, size = size.normal, text_formatting = text.format_bold)
+        // Label rechts neben der jüngsten Kerze (etwas versetzt, damit es nicht am Label des aktuellen Setups klebt).
+        // Bewusst NICHT mehr am linken sichtbaren Rand: chart.left_visible_bar_time zwingt TradingView, den ganzen
+        // Indikator bei jedem Scrollen/Zoomen neu zu berechnen (Issue #21).
+        athLbl  := label.new(bar_index + ATH_LBL_OFFSET, ath, "All-Time High " + str.tostring(ath, format.mintick), style = label.style_label_left, color = athCol, textcolor = color.black, size = size.normal, text_formatting = text.format_bold)
 
 // ═══════════════════════════════════════════════════════════════════
 // ZUSATZINFOS – Sektor / Industrie / Sektor-ETF (kompakte Tabelle oben Mitte; unten überlappt sie mit dem Volumen)
@@ -611,24 +706,39 @@ if symInfoShow and barstate.islast
 plot(htfState, "Trend übergeordnet W bzw. M (1 / -1)", display = display.data_window)
 plot(ltfState, "Trend Trade-TF D bzw. W (1 / -1)", display = display.data_window)
 plot(wrClosed, "Williams %R (abgeschl. Kerze)", display = display.data_window)
-plot(fvgOn ? array.size(fvgList) : na, "Offene FVGs (Anzahl)", display = display.data_window)
+plot(fvgOn ? fvgAlive : na, "Offene FVGs (Anzahl)", display = display.data_window)
 plot(fvgOn and hasLvls ? (fvgInZone ? 1 : 0) : na, "FVG im Gewinnbereich (1 / 0)", display = display.data_window)
 
 // ═══════════════════════════════════════════════════════════════════
-// ZUSATZINFOS – Offene FVGs als Kästen (nur zur Kontrolle, Default aus), jüngste zuerst, max. 400
+// ZUSATZINFOS – Offene FVGs als Kästen (nur zur Kontrolle, Default aus), nächste am Kurs zuerst, max. 400
 // ═══════════════════════════════════════════════════════════════════
 var array<box> fvgBoxes = array.new<box>()
 if barstate.islast
     for b in fvgBoxes
         box.delete(b)
     array.clear(fvgBoxes)
-    nf = array.size(fvgList)
-    if fvgShow and fvgOn and nf > 0
-        for i = nf - 1 to math.max(0, nf - 400)
-            f = array.get(fvgList, i)
+    if fvgShow and fvgOn and fvgAlive > 0
+        // Abwechselnd bullisch (unter dem Kurs) und bärisch (darüber), jeweils vom Kurs weg.
+        int ib = 0
+        int ie = 0
+        while array.size(fvgBoxes) < 400 and (ib < fvgBull.size() or ie < fvgBear.size())
+            bool takeBull = ib < fvgBull.size() and (ie >= fvgBear.size() or array.size(fvgBoxes) % 2 == 0)
+            Fvg f = takeBull ? fvgBull.get(ib) : fvgBear.get(ie)
+            if takeBull
+                ib += 1
+            else
+                ie += 1
+            if f.dead
+                continue
             tfTxt = f.tfId == 0 ? "4h" : f.tfId == 1 ? "D" : f.tfId == 2 ? "W" : "M"
             col   = f.dir == 1 ? fvgBullCol : fvgBearCol
             array.push(fvgBoxes, box.new(f.t, f.top, time, f.bot, xloc = xloc.bar_time, extend = extend.right, border_color = col, bgcolor = col, text = tfTxt, text_size = size.small, text_halign = text.align_left, text_color = color.new(col, 0)))
+// Hinweis, wenn nicht alle offenen FVGs gezeichnet werden (Grenze 400 Kästen): unten rechts, nur dann sichtbar.
+var table fvgCapTbl = table.new(position.bottom_right, 1, 1, border_width = 0)
+if barstate.islast
+    table.clear(fvgCapTbl, 0, 0)
+    if fvgShow and fvgOn and fvgAlive > array.size(fvgBoxes)
+        table.cell(fvgCapTbl, 0, 0, "FVG-Anzeige: " + str.tostring(array.size(fvgBoxes)) + " von " + str.tostring(fvgAlive) + " (die nächsten am Kurs)", bgcolor = color.new(color.gray, 85), text_color = color.orange, text_size = size.small, tooltip = "Der Indikator zeichnet höchstens 400 FVG-Kästen (TradingView erlaubt pro Skript max. 500 Kästen). Gezeichnet werden die dem Kurs nächstgelegenen. Der FVG-Filter prüft trotzdem alle offenen FVGs.")
 
 // ═══════════════════════════════════════════════════════════════════
 // STATUS-TABELLE
