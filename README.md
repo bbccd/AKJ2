@@ -155,7 +155,12 @@ flowchart TD
 
 **Hinweise**
 
-- Puffer = 2 Ticks (einstellbar), optional mindestens x ‰ vom Kurs.
+- **Puffer** (Issue #24, nach dem Handelsplan): bis zur Kurs-Schwelle (Standard 100 $) fest 3 Ticks, darüber
+  0,3 ‰ vom Kurs, auf den nächsten Tick aufgerundet (500 $ → 0,15 $). Ticks, Schwelle und Promille einstellbar.
+- **Glatte Zahlen meiden** (Standard an, Raster 0,50 $ = ganze und halbe Dollar, damit auch 5er und 10er):
+  Entry und SL liegen mindestens einen Puffer jenseits der nächsten Rasterstufe. Läge das Level sonst
+  innerhalb eines Puffers vor der Stufe (z. B. Hoch 49,95 → Entry 49,98 knapp unter 50,00), wird es dahinter
+  gelegt (50,03). Der Abstand wird dadurch etwas größer. Raster einstellbar, Checkbox zum Abschalten.
 - Der SL liegt immer unter dem tiefsten Tief (Long) bzw. über dem höchsten Hoch (Short) seit der
   ersten Signalkerze – auch Kerzen ohne Signal ziehen ihn nach. Er wandert nie zurück in die Bewegung.
 - Gaps, die den Entry nicht erreichen, werden ignoriert. Das Setup bleibt dann offen.

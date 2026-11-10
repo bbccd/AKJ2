@@ -109,7 +109,12 @@ und meldet Fehler zurück.
 - Long-Setup: beide TFs Kauf, rote Kerze, %R-Close ≤ −80. Short spiegelbildlich (grüne Kerze, ≥ −20).
   Mehrere Setup-Tage in Folge → immer der aktuellste zählt (Entry/SL werden nachgezogen).
 - Entry: Stop-Order Hoch + Puffer (Long) / Tief − Puffer (Short). Gaps ohne Auslösung ignorieren.
-- SL: Tief − Puffer (Long) / Hoch + Puffer (Short). Puffer in Ticks einstellbar (Default 2), optional ‰-Minimum.
+- SL: Tief − Puffer (Long) / Hoch + Puffer (Short).
+- Puffer (Issue #24, aus dem Handelsplan des Nutzers, nicht im Guide): bis zur Kurs-Schwelle (Default 100) fest
+  3 Ticks, darüber 0,3 ‰ vom Kurs (Issue-Beispiel 500 $ → 0,15 $; Nutzer hatte „3 ‰“ geschrieben, auf Nachfrage
+  0,3 ‰ bestätigt), auf den Tick aufgerundet. Ein Puffer für Entry und SL (vorher getrennte Tick-Inputs, je 2).
+  „Glatte Zahlen meiden“ (Default an, Raster 0,50): Level mindestens einen Puffer jenseits der nächsten
+  Rasterstufe, falls es sonst innerhalb eines Puffers davor läge (`bufLevel(price, dir)` in beiden Skripten).
 - Nachziehen laut Guide: solange Setup offen, zieht jeder weitere Downday (Long) / Upday (Short)
   den Entry nach – ohne erneute %R-Prüfung. Setup endet, sobald Entry erreicht wird.
 - SL (vom Nutzer präzisiert): immer unter tiefstem Tief (Long) / über höchstem Hoch (Short) seit erster
@@ -143,7 +148,6 @@ und meldet Fehler zurück.
   (request.seed, CSV in GitHub-Repo) – Stand Okt. 2026: Anlage NEUER Repositories von TradingView ausgesetzt,
   bestehende laufen weiter; Interesse per Google-Formular im Repo tradingview-pine-seeds/docs. Später erneut prüfen.
 - Setup-Verfall: laut PDF keiner, in der Praxis aber gewünscht → Hook `setupExpired()` + Input vorhanden (Default aus).
-- Puffer abhängig vom Kurs (z. B. „mind. 2 Ticks und mind. x ‰“) verfeinern.
 - Earnings-Filter wirkt nur auf aktuelle Signale (TradingView liefert nur das nächste Datum) – für Backtest lösen.
   Folge: Nach den Earnings erscheinen beim Neuladen Setups aus dem ehemaligen Fenster. Vom Nutzer als
   akzeptabel/hilfreich bewertet (live war die Sperre aktiv); im README dokumentiert.

@@ -19,18 +19,21 @@ bbLen     = input.int(10, "BB Länge", minval = 1, group = G_TREND)
 bbMult    = input.float(1.0, "BB Standardabweichung", minval = 0.1, step = 0.1, group = G_TREND)
 
 G_SETUP = "Setup & Entry"
-enableLong  = input.bool(true, "Long", group = G_SETUP, inline = "dir")
-enableShort = input.bool(true, "Short", group = G_SETUP, inline = "dir")
+enableLong  = input.bool(true, "Long-Setups", group = G_SETUP)
+enableShort = input.bool(true, "Short-Setups", group = G_SETUP)
 wrLen       = input.int(4, "Williams %R Länge", minval = 1, group = G_SETUP)
 wrLongLvl   = input.float(-80.0, "%R Long: Close ≤", group = G_SETUP)
 wrShortLvl  = input.float(-20.0, "%R Short: Close ≥", group = G_SETUP)
-entryTicks  = input.int(2, "Entry-Puffer (Ticks)", minval = 0, group = G_SETUP)
-slTicks     = input.int(2, "Stop-Loss-Puffer (Ticks)", minval = 0, group = G_SETUP)
-bufPermille = input.float(0.0, "Mindest-Puffer (‰ vom Kurs, 0 = aus)", minval = 0.0, step = 0.1, group = G_SETUP, tooltip = "Puffer = größerer Wert aus Ticks und Promille. Für teure Aktien gedacht.")
+// Puffer (Issue #24, Handelsplan): bis zur Kurs-Schwelle fest X Ticks, darüber Y ‰ vom Kurs, auf den Tick aufgerundet.
+bufTicks    = input.int(3, "Puffer: Ticks / Schwelle (Kurs) / ‰ darüber", minval = 0, group = G_SETUP, inline = "buf", tooltip = "Entry und Stop-Loss liegen je einen Puffer jenseits von Hoch bzw. Tief der Signalkerze. Bis zur Schwelle (Kurs): fester Puffer in Ticks. Darüber: Promille vom Kurs, auf den nächsten Tick aufgerundet (0,3 ‰: 500 $ → 0,15 $).")
+bufThresh   = input.float(100.0, "", minval = 0.0, step = 10.0, group = G_SETUP, inline = "buf")
+bufPermille = input.float(0.3, "", minval = 0.0, step = 0.1, group = G_SETUP, inline = "buf")
+roundAvoid  = input.bool(true, "Glatte Zahlen meiden (Raster)", group = G_SETUP, inline = "round", tooltip = "Entry und Stop-Loss liegen mindestens einen Puffer jenseits glatter Kurse (Raster 0,50 = ganze und halbe Dollar, damit auch 5er und 10er). Läge das Level innerhalb eines Puffers vor einer Rasterstufe, wird es einen Puffer hinter die Stufe gelegt – der Abstand wird dann etwas größer.")
+roundStep   = input.float(0.5, "", minval = 0.01, step = 0.5, group = G_SETUP, inline = "round")
 expiryBars  = input.int(0, "Setup verfällt nach X Bars (0 = nie)", minval = 0, group = G_SETUP, tooltip = "Gezählt ab dem ersten Setup-Bar.")
 riskFilter  = input.bool(true, "Risiko-Filter", group = G_SETUP, tooltip = "Risiko = |Entry − SL| / Entry. Außerhalb des Bereichs wird keine Order platziert.")
-riskMin     = input.float(2.0, "Risiko min. (%)", minval = 0.0, step = 0.1, group = G_SETUP, inline = "risk")
-riskMax     = input.float(7.0, "max. (%)", minval = 0.0, step = 0.1, group = G_SETUP, inline = "risk")
+riskMin     = input.float(2.0, "Risiko min. / max. (%)", minval = 0.0, step = 0.1, group = G_SETUP, inline = "risk")
+riskMax     = input.float(7.0, "", minval = 0.0, step = 0.1, group = G_SETUP, inline = "risk")
 
 G_EARN = "Earnings"
 hideNearEarn = input.bool(true, "Keine Orders im Sperrfenster", group = G_EARN, tooltip = "Greift nur für den nächsten Earnings-Termin, nicht für vergangene (Backtest).")
@@ -55,8 +58,22 @@ bbTrendState(simple int len, simple float mult) =>
         state := -1
     state
 
-priceBuffer(float price, int ticks) =>
-    math.max(ticks * syminfo.mintick, price * bufPermille / 1000.0)
+// Puffer in Preiseinheiten (Issue #24): bis zur Schwelle fest X Ticks, darüber Y ‰ vom Kurs, auf den Tick aufgerundet.
+priceBuffer(float price) =>
+    raw = price > bufThresh ? price * bufPermille / 1000.0 : bufTicks * syminfo.mintick
+    math.ceil(raw / syminfo.mintick - 1e-6) * syminfo.mintick
+
+// Entry- bzw. SL-Level: Bezugskurs ± Puffer. dir = 1: Level über dem Kurs (Long-Entry, Short-SL),
+// dir = -1: darunter (Long-SL, Short-Entry). Glatte Zahlen meiden: Liegt die nächste Rasterstufe in Richtung dir
+// näher als Level + ein weiterer Puffer, wird das Level einen Puffer jenseits dieser Stufe gelegt.
+bufLevel(float price, int dir) =>
+    buf = priceBuffer(price)
+    lvl = price + dir * buf
+    if roundAvoid and roundStep > 0
+        r = (dir == 1 ? math.ceil(price / roundStep - 1e-6) : math.floor(price / roundStep + 1e-6)) * roundStep
+        if dir * (lvl + dir * buf - r) > 0
+            lvl := r + dir * buf
+    math.round_to_mintick(lvl)
 
 setupExpired(int startBar, int barIdx) =>
     expiryBars > 0 and barIdx - startBar >= expiryBars
@@ -129,16 +146,16 @@ moveSig  = setupDir == 1 ? close < open : setupDir == -1 ? close > open : false
 if barstate.isconfirmed and evTrigDir == 0 and posDir == 0
     newDir = setupDir != 0 ? (moveSig ? setupDir : 0) : longSig ? 1 : shortSig ? -1 : 0
     if newDir != 0
-        barSl = math.round_to_mintick(newDir == 1 ? low - priceBuffer(low, slTicks) : high + priceBuffer(high, slTicks))
+        barSl = newDir == 1 ? bufLevel(low, -1) : bufLevel(high, 1)
         if setupDir == 0
             setupStart := bar_index
             slLvl      := barSl
         else
             slLvl      := newDir == 1 ? math.min(slLvl, barSl) : math.max(slLvl, barSl)
         setupDir := newDir
-        entryLvl := math.round_to_mintick(newDir == 1 ? high + priceBuffer(high, entryTicks) : low - priceBuffer(low, entryTicks))
+        entryLvl := newDir == 1 ? bufLevel(high, 1) : bufLevel(low, -1)
     else if setupDir != 0
-        barSl = math.round_to_mintick(setupDir == 1 ? low - priceBuffer(low, slTicks) : high + priceBuffer(high, slTicks))
+        barSl = setupDir == 1 ? bufLevel(low, -1) : bufLevel(high, 1)
         slLvl := setupDir == 1 ? math.min(slLvl, barSl) : math.max(slLvl, barSl)
 
 riskPct = setupDir != 0 ? math.abs(entryLvl - slLvl) / entryLvl * 100 : na
