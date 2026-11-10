@@ -27,7 +27,7 @@ D + 4h: 4h-Chart mit regulären Handelszeiten verwenden (keine Extended Hours). 
 **Anzeige im Chart**
 
 - Bollinger-Bänder 10 / 1, Bereich dazwischen dezent grau gefüllt (abschaltbar, Farbe einstellbar)
-- **All-Time High** als dicke, buttergelbe horizontale Linie mit Label (Gruppe „Zusatzinfos“)
+- **All-Time High** als dicke, buttergelbe horizontale Linie mit Label rechts neben der jüngsten Kerze (Gruppe „Zusatzinfos“)
 - Kleine Tabelle oben Mitte: **Sektor | Industrie | (evtl. Sektor-ETF)**, z. B. „Technology Services |
   Packaged Software | (evtl. XLK)“. Sektor und Industrie kommen von TradingView. Der Sektor-ETF (Select Sector
   SPDR) ist eine eigene Näherung (TradingView-Sektoren ≠ GICS) und gilt nur für S&P-500-Aktien – die

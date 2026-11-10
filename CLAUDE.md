@@ -49,8 +49,9 @@ und meldet Fehler zurück.
 - Zusatzinfos (Gruppe „Zusatzinfos“, nur Anzeige): All-Time High als dicke Linie (extend.both) + Label
   „All-Time High <Preis>“, Buttergelb #FFE135 (bewusst heller als MA 20 #F6C309). ATH aus Monatsdaten
   (ganze Historie) + Chart-Kerzen (laufender Monat).
-  ATH-Label am linken sichtbaren Rand (chart.left_visible_bar_time), Spitze links – Spitze rechts getestet und
-  verworfen (Label ragt aus dem Bild / wandert beim Scrollen).
+  ATH-Label rechts neben der jüngsten Kerze (bar_index + 5, Spitze links). Früher am linken sichtbaren Rand
+  (chart.left_visible_bar_time) – auf Nutzerwunsch aufgegeben (Issue #21): chart.left/right_visible_* zwingt
+  TradingView zur kompletten Neuberechnung bei jedem Scrollen/Zoomen. NICHT wieder verwenden.
   Tabelle oben Mitte (unten überlappte Volumen; unsichtbare Abstandszeile „Abstand von oben“ Default 6 %,
   damit sie unter der Statuszeile steht): Sektor (syminfo.sector) | Industrie (syminfo.industry) | „(evtl. XLY)“ – Sektor-ETF ist
   eigenes Mapping TradingView-Sektor → SPDR XL* (Näherung, nicht gegen ETF-Bestände geprüft, nur USD-Aktien);
@@ -69,6 +70,15 @@ und meldet Fehler zurück.
   Default Trailing nur Long, Short immer 1:1. Kein 50-%-Teilverkauf (Nutzer-Vorgabe). Kommission 1 $/Order,
   Slippage 2 Ticks (strategy()-Properties), Bar Magnifier an. Orders werden zum Close für die nächste Kerze
   gesetzt; dafür Trend „next“ (Daily ohne [1], Weekly am Freitag aus der laufenden Woche).
+
+## Performance (Issue #21) – beim Weiterentwickeln beachten
+- Höhere TFs: genau EIN request.security je Zeiteinheit (D/W/M, Funktion `htfData()` als Tupel). Neue HTF-Werte dort
+  ergänzen statt neue Abrufe anzulegen. Nicht höhere TFs als das Chart werden als "" (Chart selbst) angefragt,
+  sonst lädt TradingView Intrabar-Daten (z. B. alle Daily-Kerzen im Weekly-Chart).
+- FVGs: sortierte Listen (bullisch absteigend nach top, bärisch aufsteigend nach bot) + Ablauf-Warteschlange je TF;
+  Füllen und Treffer-Prüfung brechen früh ab. Keine Schleife über alle FVGs pro Kerze einbauen.
+- Kein chart.left_visible_bar_time / chart.right_visible_bar_time (Neuberechnung bei jedem Scrollen).
+- Messen: Pine Profiler im Pine-Editor (Profiler-Modus) zeigt die Zeit je Zeile.
 
 ## Strategie-Regeln (wie mit dem Nutzer geklärt)
 - BB 10 / 1, Williams %R Länge 4.
