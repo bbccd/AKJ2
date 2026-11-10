@@ -187,12 +187,8 @@ type Fvg
 fvgInsert(array<Fvg> list, Fvg f) =>
     n = list.size()
     int i = 0
-    if f.dir == 1
-        while i < n and list.get(i).top > f.top
-            i += 1
-    else
-        while i < n and list.get(i).bot < f.bot
-            i += 1
+    while i < n and (f.dir == 1 ? list.get(i).top > f.top : list.get(i).bot < f.bot)
+        i += 1
     list.insert(i, f)
 
 // Neues FVG anlegen (falls Lücke): in die sortierte Liste und in die Ablauf-Warteschlange seines TF. Rückgabe 1/0.
@@ -237,10 +233,8 @@ fvgFill(array<Fvg> list, bool bull, float lo, float hi) =>
                 list.remove(i)
                 filled += 1
             else
-                if bull
-                    f.top := lo
-                else
-                    f.bot := hi
+                f.top := bull ? lo : f.top
+                f.bot := bull ? f.bot : hi
                 i += 1
         else
             break
@@ -253,6 +247,13 @@ fvgCompact(array<Fvg> list) =>
         for i = n - 1 to 0
             if list.get(i).dead
                 list.remove(i)
+
+// Kasten für ein offenes FVG zeichnen (erledigte werden übersprungen).
+fvgBox(array<box> boxes, Fvg f) =>
+    if not f.dead
+        tfTxt = f.tfId == 0 ? "4h" : f.tfId == 1 ? "D" : f.tfId == 2 ? "W" : "M"
+        col   = f.dir == 1 ? fvgBullCol : fvgBearCol
+        boxes.push(box.new(f.t, f.top, time, f.bot, xloc = xloc.bar_time, extend = extend.right, border_color = col, bgcolor = col, text = tfTxt, text_size = size.small, text_halign = text.align_left, text_color = color.new(col, 0)))
 
 trendTxt(int s) => s == 1 ? "UP ▲" : s == -1 ? "DOWN ▼" : "–"
 trendCol(int s) => s == 1 ? color.green : s == -1 ? color.red : color.gray
@@ -487,20 +488,13 @@ if setupDir != 0 and fvgAlive > 0
     r   = math.abs(entryLvl - slLvl)
     zLo = setupDir == 1 ? entryLvl : entryLvl - r
     zHi = setupDir == 1 ? entryLvl + r : entryLvl
-    if setupDir == 1
-        for f in fvgBear
-            if f.bot >= zHi
-                break
-            if not f.dead and f.top > zLo
-                fvgHitCalc := true
-                break
-    else
-        for f in fvgBull
-            if f.top <= zLo
-                break
-            if not f.dead and f.bot < zHi
-                fvgHitCalc := true
-                break
+    hitList = setupDir == 1 ? fvgBear : fvgBull
+    for f in hitList
+        if setupDir == 1 ? f.bot >= zHi : f.top <= zLo
+            break
+        if not f.dead and f.bot < zHi and f.top > zLo
+            fvgHitCalc := true
+            break
 // Kerze, auf der der Entry erreicht wird: Zustand des Setups von der Vorkerze (als die Order lag).
 fvgInZone = setupDir != 0 ? fvgHitCalc : evTrigDir != 0 ? fvgHitCalc[1] : false   // gemessen, immer
 fvgHit    = fvgFilter and fvgInZone                                                // wirkt nur mit Filter
@@ -719,20 +713,13 @@ if barstate.islast
     array.clear(fvgBoxes)
     if fvgShow and fvgOn and fvgAlive > 0
         // Abwechselnd bullisch (unter dem Kurs) und bärisch (darüber), jeweils vom Kurs weg.
-        int ib = 0
-        int ie = 0
-        while array.size(fvgBoxes) < 400 and (ib < fvgBull.size() or ie < fvgBear.size())
-            bool takeBull = ib < fvgBull.size() and (ie >= fvgBear.size() or array.size(fvgBoxes) % 2 == 0)
-            Fvg f = takeBull ? fvgBull.get(ib) : fvgBear.get(ie)
-            if takeBull
-                ib += 1
-            else
-                ie += 1
-            if f.dead
-                continue
-            tfTxt = f.tfId == 0 ? "4h" : f.tfId == 1 ? "D" : f.tfId == 2 ? "W" : "M"
-            col   = f.dir == 1 ? fvgBullCol : fvgBearCol
-            array.push(fvgBoxes, box.new(f.t, f.top, time, f.bot, xloc = xloc.bar_time, extend = extend.right, border_color = col, bgcolor = col, text = tfTxt, text_size = size.small, text_halign = text.align_left, text_color = color.new(col, 0)))
+        for k = 0 to math.max(fvgBull.size(), fvgBear.size()) - 1
+            if k < fvgBull.size() and fvgBoxes.size() < 400
+                fvgBox(fvgBoxes, fvgBull.get(k))
+            if k < fvgBear.size() and fvgBoxes.size() < 400
+                fvgBox(fvgBoxes, fvgBear.get(k))
+            if fvgBoxes.size() >= 400
+                break
 // Hinweis, wenn nicht alle offenen FVGs gezeichnet werden (Grenze 400 Kästen): unten rechts, nur dann sichtbar.
 var table fvgCapTbl = table.new(position.bottom_right, 1, 1, border_width = 0)
 if barstate.islast
