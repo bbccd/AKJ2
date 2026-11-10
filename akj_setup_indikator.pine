@@ -306,19 +306,24 @@ chartStateNext = bbTrendState(bbLen, bbMult)
 chartState     = chartStateNext[1]
 wrClosed   = barstate.isconfirmed ? wr : wr[1]
 // Höhere TFs – Performance (Issue #21): EIN Abruf je Zeiteinheit (D, W, M) liefert alles, was gebraucht wird
-// (Trend, FVG-Kerzen, ATH), statt mehrerer Einzelabrufe. Ist die Zeiteinheit nicht höher als das Chart, wird
-// das Chart selbst abgefragt ("") – sonst müsste TradingView z. B. im Weekly-Chart alle Daily-Kerzen laden.
+// (Trend, FVG-Kerzen, ATH), statt mehrerer Einzelabrufe. Abgerufen wird nur, was Spielweise und Chart brauchen
+// (dynamische Requests, in v6 Standard): D nur im 4h-Chart (D + 4h), W nur im Trade-Chart von W + D bzw. D + 4h,
+// M immer (All-Time High). Der Weekly-Chart lädt so keine Daily-Kerzen, der Daily-Chart rechnet seinen eigenen
+// Trend nicht ein zweites Mal über request.security.
 // Werte mit [1] + lookahead = zuletzt ABGESCHLOSSENE Kerze (kein Repainting); s0 = Zustand inkl. laufender Kerze.
 htfData() =>
     s = bbTrendState(bbLen, bbMult)
     [s[1], s, high[1], low[1], high[3], low[3], time[3], time[1], ta.max(high)[1]]
-chartSec = timeframe.in_seconds()
-tfD = chartSec < timeframe.in_seconds("D") ? "D" : ""
-tfW = chartSec < timeframe.in_seconds("W") ? "W" : ""
-tfM = chartSec < timeframe.in_seconds("M") ? "M" : ""
-[dS1, dS0, dH, dL, dH2, dL2, dT2, dT, dAth] = request.security(syminfo.tickerid, tfD, htfData(), lookahead = barmerge.lookahead_on)
-[wS1, wS0, wH, wL, wH2, wL2, wT2, wT, wAth] = request.security(syminfo.tickerid, tfW, htfData(), lookahead = barmerge.lookahead_on)
-[mS1, mS0, mH, mL, mH2, mL2, mT2, mT, mAth] = request.security(syminfo.tickerid, tfM, htfData(), lookahead = barmerge.lookahead_on)
+htfReq(simple bool need, simple string tf) =>
+    if need
+        request.security(syminfo.tickerid, tf, htfData(), lookahead = barmerge.lookahead_on)
+    else
+        [int(na), int(na), float(na), float(na), float(na), float(na), int(na), int(na), float(na)]
+needD = isDH and is4h
+needW = tradeChart and not isMW
+[dS1, dS0, dH, dL, dH2, dL2, dT2, dT, dAth] = htfReq(needD, "D")
+[wS1, wS0, wH, wL, wH2, wL2, wT2, wT, wAth] = htfReq(needW, "W")
+[mS1, mS0, mH, mL, mH2, mL2, mT2, mT, mAth] = htfReq(true, "M")
 
 // Übergeordneter TF (W, M bzw. D) im Trade-Chart ohne Repainting: nur abgeschlossene Kerzen zählen.
 htfReqState = isMW ? mS1 : isDH ? dS1 : wS1
@@ -729,8 +734,14 @@ plot(fvgOn and hasLvls ? (fvgInZone ? 1 : 0) : na, "FVG im Gewinnbereich (1 / 0)
 // ═══════════════════════════════════════════════════════════════════
 // ZUSATZINFOS – Offene FVGs als Kästen (nur zur Kontrolle, Default aus), nächste am Kurs zuerst, max. 400
 // ═══════════════════════════════════════════════════════════════════
+// Performance: Die FVG-Listen ändern sich nur mit abgeschlossenen Kerzen. Die Kästen werden deshalb je Kerze nur
+// einmal gezeichnet (erster Tick) und beim Close der jüngsten Kerze noch einmal – nicht bei jedem Tick, das wären
+// bis zu 400 box.delete + box.new pro Kursänderung.
 var array<box> fvgBoxes = array.new<box>()
-if barstate.islast
+var table fvgCapTbl = table.new(position.bottom_right, 1, 1, border_width = 0)
+var int fvgDrawn = -1   // Kerze, für die die Kästen zuletzt gezeichnet wurden
+if barstate.islast and (barstate.isconfirmed or bar_index != fvgDrawn)
+    fvgDrawn := barstate.isconfirmed ? bar_index + 1 : bar_index
     for b in fvgBoxes
         box.delete(b)
     array.clear(fvgBoxes)
@@ -743,9 +754,7 @@ if barstate.islast
                 fvgBox(fvgBoxes, fvgBear.get(k))
             if fvgBoxes.size() >= 400
                 break
-// Hinweis, wenn nicht alle offenen FVGs gezeichnet werden (Grenze 400 Kästen): unten rechts, nur dann sichtbar.
-var table fvgCapTbl = table.new(position.bottom_right, 1, 1, border_width = 0)
-if barstate.islast
+    // Hinweis, wenn nicht alle offenen FVGs gezeichnet werden (Grenze 400 Kästen): unten rechts, nur dann sichtbar.
     table.clear(fvgCapTbl, 0, 0)
     if fvgShow and fvgOn and fvgAlive > array.size(fvgBoxes)
         table.cell(fvgCapTbl, 0, 0, "FVG-Anzeige: " + str.tostring(array.size(fvgBoxes)) + " von " + str.tostring(fvgAlive) + " (die nächsten am Kurs)", bgcolor = color.new(color.gray, 85), text_color = color.orange, text_size = size.small, tooltip = "Der Indikator zeichnet höchstens 400 FVG-Kästen (TradingView erlaubt pro Skript max. 500 Kästen). Gezeichnet werden die dem Kurs nächstgelegenen. Der FVG-Filter prüft trotzdem alle offenen FVGs.")
