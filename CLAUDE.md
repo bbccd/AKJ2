@@ -78,7 +78,12 @@ und meldet Fehler zurück.
 - FVGs: sortierte Listen (bullisch absteigend nach top, bärisch aufsteigend nach bot) + Ablauf-Warteschlange je TF;
   Füllen und Treffer-Prüfung brechen früh ab. Keine Schleife über alle FVGs pro Kerze einbauen.
 - Kein chart.left_visible_bar_time / chart.right_visible_bar_time (Neuberechnung bei jedem Scrollen).
-- Messen: Pine Profiler im Pine-Editor (Profiler-Modus) zeigt die Zeit je Zeile.
+- Messen: Pine Profiler im Pine-Editor (Drei-Punkte-Menü → Profiler-Modus) zeigt die Zeit je Zeile; im Popover
+  der teuersten Zeilen steht die Gesamtzeit („… s total“). Vergleich: frühere Version über die Version History
+  im Pine-Editor wiederherstellen, gleiche Aktie/TF/Einstellungen. Stand nach #21: etwa halbe Laufzeit wie vorher.
+- FVG-Kästen: max. 400 (die nächsten am Kurs, abwechselnd unter/über dem Kurs); sind es mehr, Hinweis
+  „FVG-Anzeige: X von Y“ unten rechts. Der Filter prüft immer alle offenen FVGs (vom Nutzer so gewünscht:
+  Anzeige darf nicht stillschweigend FVGs weglassen).
 
 ## Strategie-Regeln (wie mit dem Nutzer geklärt)
 - BB 10 / 1, Williams %R Länge 4.
@@ -109,22 +114,29 @@ und meldet Fehler zurück.
   den Entry nach – ohne erneute %R-Prüfung. Setup endet, sobald Entry erreicht wird.
 - SL (vom Nutzer präzisiert): immer unter tiefstem Tief (Long) / über höchstem Hoch (Short) seit erster
   Signalkerze; auch Kerzen ohne Signal (z. B. grüne bei Long) ziehen ihn nach. SL wandert nie zurück.
-- (Nur für spätere Strategie:) Ziel 1 bei CRV 1:1 → 50 % schließen, SL auf Einstand; Rest optional am BB-Mittelband nachziehen.
 - Earnings: Sperrfenster (8 Kalendertage vorher bis Earnings-Tag/-Woche) grau hinterlegen, in allen Charts;
   dort standardmäßig keine Signale. Eigener „E“-Marker entfernt (lag auf der Folgekerze) – TradingView zeigt E selbst.
   Vergangene Fenster per bgcolor-Offset rückwirkend; bei Zahlen nach Börsenschluss ist der Folgetag mit grau.
-  Earnings-Linie: dick, dunkelgrau, nur Daily, abschaltbar; auf der letzten grauen Kerze (Mitte der Kerze, nicht deren Rand).
+  Earnings-Linie: dick, dunkelgrau, nur Daily (in D + 4h auch 4h), abschaltbar; auf der letzten grauen Kerze (Mitte der Kerze, nicht deren Rand).
 - Risiko-Filter (Setting, Default an): Risiko % = |Entry − SL| / Entry, nur Setups mit 2–7 % anzeigen/im Screener.
   Filtert nur die Anzeige (Linien, Marker, Hervorhebung, Alerts, Screener), Setup-Zustand läuft intern weiter.
   Label des aktuellen Setups zeigt unten „R: 2.3 %“ (eine Nachkommastelle).
 - FVG-Filter (Issue #18, mit Nutzer geklärt; nicht im Guide): Setting, Default AUS (Nutzer: muss abschaltbar sein).
   Long ungültig bei ungefülltem BÄRISCHEM FVG, Short bei bullischem, das [Entry, Ziel 1:1] irgendwie überlappt.
   FVG zählt, bis komplett gefüllt (teilweise gefüllt → Restlücke). Wirkung wie Risiko-Filter (setupOk = riskOk
-  und kein FVG). TFs D/W/M je mit Rückschau in Kerzen (M + W: W/M). HTF-FVGs per request.security ([1] +
+  und kein FVG). TFs 4h/D/W/M je mit Rückschau in Kerzen (W + D: D/W/M, M + W: W/M, D + 4h: alle). HTF-FVGs per request.security ([1] +
   lookahead) aus abgeschlossenen Kerzen, gefüllt mit Chart-Kerzen; nur ungefüllte werden gemerkt. Optionale
   Kontroll-Kästen. FVGs werden immer berechnet (auch Filter aus), damit die Screener-Spalte „FVG im
   Gewinnbereich (1 / 0)“ unabhängig vom Filter gefüllt ist. Strategie noch NICHT synchronisiert (erst nach Test im Indikator).
 - Risiko: 0,5–1 % (normal) bzw. 1–2 % (stark) des max. akzeptierten Depot-Drawdowns pro Trade.
+
+## Stand / nächste Schritte (Nov. 2026)
+- Zuletzt gemergt: #21 Performance (PR #27), davor D + 4h (#14) und FVG-Filter (#18).
+- Aktuelle Issues immer per `gh issue list -R bbccd/AKJ2` holen (diese Liste kann veralten).
+- Kandidaten: FVG-Filter in `akj_strategy.pine` übernehmen (Indikator ist getestet); Idee #16 relative Stärke;
+  Idee #17 Library + Tests (siehe „Tests“ oben). Nutzer meldet evtl. noch einen kleinen Bug aus D + 4h als Issue.
+- Arbeitsweise des Nutzers: kopiert den Code in den Pine-Editor, testet im Chart/Screener und meldet Fehler zurück.
+  Änderungen deshalb klein und nachvollziehbar halten und erklären, was zu prüfen ist.
 
 ## Offene Punkte / Refinement
 - Externe Daten (z. B. Index-Mitgliedschaft): Pine hat keinen Internetzugriff. Einziger Weg wäre Pine Seeds
