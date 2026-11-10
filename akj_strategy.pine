@@ -87,16 +87,21 @@ inRange = time >= startDate and time <= endDate
 [basis, upper, lower] = ta.bb(close, bbLen, bbMult)
 wr = ta.wpr(wrLen)
 
+// Weekly: EIN Abruf liefert den Zustand der letzten abgeschlossenen Woche ([1] + lookahead, kein Repainting)
+// und den Zustand inkl. laufender Woche (wie htfData() im Indikator, Issue #21).
+wData() =>
+    s = bbTrendState(bbLen, bbMult)
+    [s[1], s]
+[weeklyState, wStateNow] = request.security(syminfo.tickerid, "W", wData(), lookahead = barmerge.lookahead_on)
+
 // Regime auf dieser Kerze: gilt ab der Kerze nach der Trigger-Kerze (wie im Indikator).
-dailyState  = bbTrendState(bbLen, bbMult)[1]
-weeklyState = request.security(syminfo.tickerid, "W", bbTrendState(bbLen, bbMult)[1], lookahead = barmerge.lookahead_on)
+dailyNext   = bbTrendState(bbLen, bbMult)   // Zustand nach dem heutigen Close
+dailyState  = dailyNext[1]
 longTrend   = isDaily and weeklyState == 1  and dailyState == 1
 shortTrend  = isDaily and weeklyState == -1 and dailyState == -1
 
 // Regime für die NÄCHSTE Kerze (Orders werden zum Close für die nächste Kerze gesetzt):
 // Daily = Zustand nach dem heutigen Close; Weekly = am Freitag der Zustand der heute endenden Woche.
-dailyNext   = bbTrendState(bbLen, bbMult)
-wStateNow   = request.security(syminfo.tickerid, "W", bbTrendState(bbLen, bbMult), lookahead = barmerge.lookahead_on)
 weeklyNext  = dayofweek == dayofweek.friday ? wStateNow : weeklyState
 longNext    = isDaily and weeklyNext == 1  and dailyNext == 1
 shortNext   = isDaily and weeklyNext == -1 and dailyNext == -1
