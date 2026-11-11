@@ -22,8 +22,15 @@ und meldet Fehler zurück.
   `git@github-bbccd:bbccd/AKJ2.git` (Eintrag `Host github-bbccd` in `~/.ssh/config` mit eigenem Key). Niemals den
   Arbeits-Account bB-0202 (Alias `github-github-haeger`) verwenden. Fehlt der Alias auf einem Rechner: Nutzer fragen,
   nicht auf einen anderen Account ausweichen.
-- Tests: zurückgestellt; zusammen mit der Library angehen (Einstieg: Regressionstest per Chart-CSV-Export gegen
-  Referenz, später Pine-Testskript mit erfundenen Kerzen für die Sonderfälle aus Bug-Reports). Nicht von selbst anstoßen.
+- Library + Tests (Issue #17, Nov. 2026, Nutzer-Entscheidung): `akj_lib.pine` = Pine-Library „AKJ2“ mit den reinen
+  Funktionen (alle Eingaben als Parameter, kein Zugriff auf Inputs/Serien/syminfo; `// @function/@param/@returns`
+  dokumentieren). Nutzer veröffentlicht sie PRIVAT auf TradingView; jede Änderung = neue Version, Einbinden per
+  `import bBccdde/AKJ2/<Version> as akj` (TradingView-Benutzername bBccdde). `tests/akj_tests.pine` importiert die Library und prüft sie mit
+  erfundenen Werten (Tabelle im Chart); Benutzername/Version in der Importzeile vom Nutzer einzutragen. Reihenfolge
+  (vom Nutzer vorgegeben): 1. Library erstellen/veröffentlichen, 2. Tests dagegen schreiben, 3. erst bei guter
+  Abdeckung die Kopien aus Indikator und Strategie entfernen und importieren. Bis dahin enthalten Indikator und
+  Strategie die Logik weiter selbst (bei Regeländerungen alle drei synchron halten!). Nächste Library-Kandidaten:
+  Setup-Zustandsautomat, FVG-Funktionen. Regressionstest per Chart-CSV-Export optional.
 - Offen, nicht entschieden: Farbe „Kein Regime“ evtl. in „Regime endet“ umbenennen.
 
 ## Dateien

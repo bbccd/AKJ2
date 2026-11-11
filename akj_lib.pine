@@ -1,0 +1,57 @@
+//@version=6
+// @description AKJ2 – reine Funktionen der „Aktien-Kann-Jeder“-Strategie: Trend-Schritt am Bollinger-Band, Puffer
+// und Entry-/SL-Level. Alle Eingaben sind Parameter – kein Zugriff auf Inputs, Kerzenserien oder syminfo. Dadurch
+// lassen sich die Funktionen mit erfundenen Werten testen (tests/akj_tests.pine) und von Indikator und Strategie
+// gemeinsam nutzen.
+//
+// Veröffentlichen: Datei im Pine-Editor als Library öffnen → „Skript veröffentlichen“ → Sichtbarkeit „Privat“.
+// Jede Änderung ergibt eine neue Version. Einbinden in anderen Skripten:
+//     import bBccdde/AKJ2/<Version> as akj
+//     akj.bufLevel(high, 1, syminfo.mintick, 3, 100.0, 0.3, true, 0.5)
+library("AKJ2", overlay = true)
+
+// @function Ein Schritt des gehaltenen Trendzustands (Guide: 2x Close über dem oberen BB = Kauf, 2x Close unter
+//           dem unteren BB = Verkauf; gilt, bis der Gegentrigger kommt).
+// @param state Bisheriger Zustand: 1 = Kauf, -1 = Verkauf, 0 = keiner.
+// @param c0    Close der aktuellen Kerze.
+// @param c1    Close der Vorkerze.
+// @param up0   Oberes Bollinger-Band der aktuellen Kerze.
+// @param up1   Oberes Bollinger-Band der Vorkerze.
+// @param lo0   Unteres Bollinger-Band der aktuellen Kerze.
+// @param lo1   Unteres Bollinger-Band der Vorkerze.
+// @returns Neuer Zustand: 1, -1 oder unverändert `state`.
+export trendStep(int state, float c0, float c1, float up0, float up1, float lo0, float lo1) =>
+    c0 > up0 and c1 > up1 ? 1 : c0 < lo0 and c1 < lo1 ? -1 : state
+
+// @function Puffer in Preiseinheiten (Issue #24, Handelsplan): bis zur Kurs-Schwelle fest `ticks` Ticks, darüber
+//           `permille` ‰ vom Kurs, auf den nächsten Tick aufgerundet (0,3 ‰ bei 500 → 0,15).
+// @param price    Bezugskurs (Hoch bzw. Tief der Signalkerze).
+// @param tick     Tick-Größe des Symbols (syminfo.mintick).
+// @param ticks    Fester Puffer in Ticks bis zur Schwelle.
+// @param thresh   Kurs-Schwelle; darüber gilt der Promille-Puffer.
+// @param permille Puffer in ‰ vom Kurs oberhalb der Schwelle.
+// @returns Puffer in Preiseinheiten, Vielfaches von `tick`.
+export priceBuffer(float price, float tick, int ticks, float thresh, float permille) =>
+    raw = price > thresh ? price * permille / 1000.0 : ticks * tick
+    math.ceil(raw / tick - 1e-6) * tick
+
+// @function Entry- bzw. SL-Level: Bezugskurs ± Puffer. Glatte Zahlen meiden (Issue #24): Liegt die nächste
+//           Rasterstufe (z. B. ganzer/halber Dollar) in Richtung `dir` näher als Level + ein weiterer Puffer, wird
+//           das Level einen Puffer jenseits dieser Stufe gelegt.
+// @param price    Bezugskurs (Hoch bzw. Tief der Signalkerze).
+// @param dir      1 = Level über dem Kurs (Long-Entry, Short-SL), -1 = darunter (Long-SL, Short-Entry).
+// @param tick     Tick-Größe des Symbols (syminfo.mintick).
+// @param ticks    Fester Puffer in Ticks bis zur Schwelle.
+// @param thresh   Kurs-Schwelle; darüber gilt der Promille-Puffer.
+// @param permille Puffer in ‰ vom Kurs oberhalb der Schwelle.
+// @param avoid    Glatte Zahlen meiden an/aus.
+// @param step     Raster für glatte Zahlen (0,5 = ganze und halbe Dollar).
+// @returns Level, auf den Tick gerundet.
+export bufLevel(float price, int dir, float tick, int ticks, float thresh, float permille, bool avoid, float step) =>
+    buf = priceBuffer(price, tick, ticks, thresh, permille)
+    lvl = price + dir * buf
+    if avoid and step > 0
+        r = (dir == 1 ? math.ceil(price / step - 1e-6) : math.floor(price / step + 1e-6)) * step
+        if dir * (lvl + dir * buf - r) > 0
+            lvl := r + dir * buf
+    math.round(lvl / tick) * tick
