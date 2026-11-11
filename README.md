@@ -191,6 +191,12 @@ flowchart TD
   Historie geladen hat; im Pine Screener ist die geladene Historie evtl. kürzer.
   Screener-Spalte „FVG im Gewinnbereich (1 / 0)“ wird immer berechnet, auch bei ausgeschaltetem Filter:
   „Setup-Status = 1“ plus „FVG im Gewinnbereich = 0“ zeigt nur Long-Setups ohne FVG im Weg.
+- **Dividendenbereinigung („ADJ“, Issue #26):** Der Schalter unten rechts im Chart gilt je Chart. Der Indikator
+  rechnet mit den Kursen, die der Chart liefert – auch die Weekly-/Monthly-Daten im Daily-Chart übernehmen die
+  Einstellung des Daily-Charts. Bereinigte und unbereinigte Kurse weichen um Cents ab; liegt ein Wochenschluss
+  nahe am Bollinger-Band, kann der Trend dadurch in zwei Charts unterschiedlich ausfallen (Beispiel XLU, Nov.
+  2026: Weekly-Chart mit ADJ Long, Daily-Chart ohne ADJ noch Short). Alle Charts gleich einstellen. Bei aktiver
+  Bereinigung zeigt der Indikator in der Chart-Mitte eine Warnung (abschaltbar, Gruppe „Anzeige – Zusatzinfos“).
 - **Earnings-Sperre wirkt nur für den nächsten Termin.** TradingView liefert in Pine nur den nächsten
   Earnings-Termin, nicht die vergangenen im Voraus. Vergangene Sperrfenster werden zwar grau
   hinterlegt, sperren aber keine Signale. Deshalb gilt:
