@@ -92,8 +92,13 @@ und meldet Fehler zurück.
 
 ## Performance (Issue #21) – beim Weiterentwickeln beachten
 - Höhere TFs: genau EIN request.security je Zeiteinheit (D/W/M, Funktion `htfData()` als Tupel). Neue HTF-Werte dort
-  ergänzen statt neue Abrufe anzulegen. Nicht höhere TFs als das Chart werden als "" (Chart selbst) angefragt,
-  sonst lädt TradingView Intrabar-Daten (z. B. alle Daily-Kerzen im Weekly-Chart).
+  ergänzen statt neue Abrufe anzulegen. Abrufe laufen nur, wenn Spielweise + Chart sie brauchen (`htfReq(need, tf)`,
+  dynamische Requests): D nur im 4h-Chart, W nur im Trade-Chart von W + D / D + 4h, M immer (ATH). Nie eine
+  Zeiteinheit abrufen, die nicht höher als das Chart ist – sonst lädt TradingView Intrabar-Daten.
+- Zeichnen auf der jüngsten Kerze (Kästen, Tabellen) nur, wenn sich etwas geändert hat (`fvgDrawn`-Muster), nicht
+  bei jedem Tick – `barstate.islast` ist während der Handelszeit bei jedem Kurs-Update wahr.
+- Plot-Budget: TradingView erlaubt max. 64 plot/bgcolor/fill-Aufrufe je Skript; der Indikator nutzt ~51
+  (19 plot, 31 bgcolor, 1 fill). Neue Features sparsam mit plot()/bgcolor() umsetzen.
 - FVGs: sortierte Listen (bullisch absteigend nach top, bärisch aufsteigend nach bot) + Ablauf-Warteschlange je TF;
   Füllen und Treffer-Prüfung brechen früh ab. Keine Schleife über alle FVGs pro Kerze einbauen.
 - Kein chart.left_visible_bar_time / chart.right_visible_bar_time (Neuberechnung bei jedem Scrollen).
