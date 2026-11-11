@@ -96,6 +96,7 @@ symInfoGap  = input.float(6.0, "Abstand der Tabelle von oben (% der Charthöhe)"
 athShow  = input.bool(true, "All-Time High anzeigen", group = G_INFO)
 athCol   = input.color(#FFE135, "Farbe, Dicke", group = G_INFO, inline = "ath")
 athWidth = input.int(3, "", minval = 1, maxval = 6, group = G_INFO, inline = "ath")
+adjWarn  = input.bool(true, "Warnung bei Dividendenbereinigung (ADJ)", group = G_INFO, tooltip = "Zeigt in der Chart-Mitte einen Hinweis, wenn der Chart dividendenbereinigte Kurse verwendet (Schalter „ADJ“ unten rechts, gilt je Chart). Bereinigte und unbereinigte Kurse können am Bollinger-Band um Cents abweichen und damit den Trend anders entscheiden (Issue #26). Alle Charts sollten dieselbe Einstellung haben. Wer bewusst mit Bereinigung arbeitet, schaltet die Warnung ab.")
 
 G_RANGE = "Zeitraum"
 startDate = input.time(timestamp("2020-01-01"), "Startdatum", group = G_RANGE)
@@ -748,6 +749,24 @@ if barstate.islast
     table.clear(fvgCapTbl, 0, 0)
     if fvgShow and fvgOn and fvgAlive > array.size(fvgBoxes)
         table.cell(fvgCapTbl, 0, 0, "FVG-Anzeige: " + str.tostring(array.size(fvgBoxes)) + " von " + str.tostring(fvgAlive) + " (die nächsten am Kurs)", bgcolor = color.new(color.gray, 85), text_color = color.orange, text_size = size.small, tooltip = "Der Indikator zeichnet höchstens 400 FVG-Kästen (TradingView erlaubt pro Skript max. 500 Kästen). Gezeichnet werden die dem Kurs nächstgelegenen. Der FVG-Filter prüft trotzdem alle offenen FVGs.")
+
+// ═══════════════════════════════════════════════════════════════════
+// ZUSATZINFOS – Warnung bei Dividendenbereinigung (Issue #26)
+// Die Chart-Einstellung „ADJ“ steckt in syminfo.tickerid (z. B. ={"adjustment":"dividends","symbol":"AMEX:XLU"}).
+// request.security erbt sie, der Trend hängt also je Chart von dieser Einstellung ab – bei Kursen nahe am
+// Bollinger-Band kann der Weekly-Trend im Daily-Chart anders ausfallen als im Weekly-Chart.
+// ═══════════════════════════════════════════════════════════════════
+isAdjusted = str.contains(syminfo.tickerid, "adjustment")
+// Chart-Mitte: unten links/rechts überdeckt der Volumen-Indikator die Meldung. Deckend und groß, damit sie sich
+// auch vom Trigger-Hintergrund abhebt.
+ADJ_BG  = #E65100
+ADJ_TIP = "Dieser Chart verwendet dividendenbereinigte Kurse (Schalter „ADJ“ unten rechts, gilt je Chart). Bollinger-Band und Trend werden damit berechnet und können von Charts ohne Bereinigung abweichen. Alle Charts gleich einstellen. Warnung abschaltbar: „Anzeige – Zusatzinfos“."
+var table adjTbl = table.new(position.middle_center, 2, 1, bgcolor = ADJ_BG, frame_color = ADJ_BG, frame_width = 4, border_width = 0)
+if barstate.islast
+    table.clear(adjTbl, 0, 0, 1, 0)
+    if adjWarn and isAdjusted
+        table.cell(adjTbl, 0, 0, "⚠", text_color = color.white, text_size = size.huge, text_formatting = text.format_bold, tooltip = ADJ_TIP)
+        table.cell(adjTbl, 1, 0, "Dividendenbereinigt (ADJ)\nTrend kann abweichen", text_color = color.white, text_size = size.large, text_halign = text.align_left, text_formatting = text.format_bold, tooltip = ADJ_TIP)
 
 // ═══════════════════════════════════════════════════════════════════
 // STATUS-TABELLE

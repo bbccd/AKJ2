@@ -82,6 +82,14 @@ und meldet Fehler zurück.
   Slippage 2 Ticks (strategy()-Properties), Bar Magnifier an. Orders werden zum Close für die nächste Kerze
   gesetzt; dafür Trend „next“ (Daily ohne [1], Weekly am Freitag aus der laufenden Woche).
 
+- Dividendenbereinigung (Issue #26): Schalter „ADJ“ gilt je Chart und steckt in syminfo.tickerid
+  (`={"adjustment":"dividends",…}`); request.security erbt sie. Bei Wochenschluss nahe am BB kann der Weekly-Trend
+  im Daily-Chart (ADJ aus) anders sein als im Weekly-Chart (ADJ an) – kein Code-Fehler, Charts gleich einstellen.
+  Indikator warnt in der Chart-Mitte bei aktiver Bereinigung (Input „Warnung bei Dividendenbereinigung (ADJ)“,
+  Default an; Erkennung über str.contains(syminfo.tickerid, "adjustment"), vom Nutzer bestätigt. Nicht unten
+  links/rechts: dort überdeckt der Volumen-Indikator die Meldung). Nichts im Code
+  erzwingen (sonst laufen Chart-Trend und abgerufener HTF-Trend auseinander).
+
 ## Performance (Issue #21) – beim Weiterentwickeln beachten
 - Höhere TFs: genau EIN request.security je Zeiteinheit (D/W/M, Funktion `htfData()` als Tupel). Neue HTF-Werte dort
   ergänzen statt neue Abrufe anzulegen. Nicht höhere TFs als das Chart werden als "" (Chart selbst) angefragt,
