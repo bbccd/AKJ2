@@ -196,3 +196,79 @@ export fvgHit(array<Fvg> bull, array<Fvg> bear, int dir, float entry, float sl) 
                 hit := true
                 break
     hit
+
+// ═══════════════════════════════════════════════════════════════════
+// KLEINE HILFSFUNKTIONEN (Setup-Verfall, Earnings-Kalender, Sektor-ETF)
+// ═══════════════════════════════════════════════════════════════════
+
+// @function Setup-Verfall (Hook fürs Refinement): Ist ein offenes Setup nach `expiryBars` Kerzen verfallen?
+// @param barIndex   Aktuelle Kerzennummer.
+// @param startBar   Kerzennummer der ersten Signalkerze.
+// @param expiryBars Verfall nach so vielen Kerzen; 0 = nie.
+// @returns true, wenn das Setup verfallen ist.
+export setupExpired(int barIndex, int startBar, int expiryBars) =>
+    expiryBars > 0 and barIndex - startBar >= expiryBars
+
+// @function Kalendertag eines Zeitpunkts in einer Zeitzone, als Mitternacht UTC dieses Tages (ms). Damit lassen sich
+//           Kerzen und Termine nach Kalendertagen vergleichen, unabhängig von der Uhrzeit (Issue #1).
+// @param t  Zeitpunkt in ms (z. B. `time`).
+// @param tz Zeitzone, z. B. `syminfo.timezone`.
+// @returns Mitternacht UTC des Kalendertags von `t` in `tz`.
+export dayOf(int t, string tz) =>
+    timestamp("UTC", year(t, tz), month(t, tz), dayofmonth(t, tz), 0, 0)
+
+// @function Earnings-Tag als UTC-Datum (Mitternacht UTC). Stimmt für Termine mit Uhrzeit (vor Börsenbeginn bis
+//           abends) wie für reine Datumsangaben (Mitternacht UTC – in New Yorker Zeit wäre das schon der Vortag).
+// @param nextEarn Earnings-Zeitpunkt in ms (`earnings.future_time`), na = kein Termin.
+// @returns Mitternacht UTC des Earnings-Tags, na ohne Termin.
+export earnDay(int nextEarn) =>
+    na(nextEarn) ? int(na) : nextEarn - nextEarn % 86400000
+
+// @function Liegt der Zeitraum [firstDay, lastDay] (Kalendertage, Mitternacht UTC) im Sperrfenster
+//           [Earnings-Tag − winMs, Earnings-Tag]? Eine Kerze liegt im Fenster, wenn einer ihrer Tage darin liegt
+//           (Daily wie Weekly).
+// @param firstDay Erster Kalendertag der Kerze (aus `dayOf`).
+// @param lastDay  Letzter Kalendertag der Kerze (aus `dayOf`).
+// @param eDay     Earnings-Tag (aus `earnDay`), na = kein Termin → false.
+// @param winMs    Länge des Sperrfensters vor dem Earnings-Tag in ms (Kalendertage × 86400000).
+// @returns true, wenn die Kerze im Sperrfenster liegt.
+export inEarnWin(int firstDay, int lastDay, int eDay, int winMs) =>
+    not na(eDay) and lastDay >= eDay - winMs and firstDay <= eDay
+
+// @function TradingView-Sektor (FactSet-Einteilung) → SPDR-Sektor-ETF (GICS). Näherung; bekannte Abweichungen über
+//           die Industrie korrigiert (REITs → XLRE, Internet-Dienste wie Alphabet/Meta → XLC, Discounter → XLP).
+//           Gilt nur für S&P-500-Aktien – die Mitgliedschaft liefert Pine nicht.
+// @param sec Sektor (`syminfo.sector`).
+// @param ind Industrie (`syminfo.industry`).
+// @returns ETF-Kürzel oder „–“.
+export sectorEtf(string sec, string ind) =>
+    string etf = "–"
+    if str.contains(ind, "Real Estate")
+        etf := "XLRE"
+    else if ind == "Internet Software/Services"
+        etf := "XLC"
+    else if ind == "Food Retail" or ind == "Discount Stores"
+        etf := "XLP"
+    else
+        etf := switch sec
+            "Technology Services"    => "XLK"
+            "Electronic Technology"  => "XLK"
+            "Communications"         => "XLC"
+            "Consumer Services"      => "XLY"
+            "Consumer Durables"      => "XLY"
+            "Retail Trade"           => "XLY"
+            "Consumer Non-Durables"  => "XLP"
+            "Health Technology"      => "XLV"
+            "Health Services"        => "XLV"
+            "Finance"                => "XLF"
+            "Energy Minerals"        => "XLE"
+            "Utilities"              => "XLU"
+            "Non-Energy Minerals"    => "XLB"
+            "Process Industries"     => "XLB"
+            "Producer Manufacturing" => "XLI"
+            "Industrial Services"    => "XLI"
+            "Commercial Services"    => "XLI"
+            "Distribution Services"  => "XLI"
+            "Transportation"         => "XLI"
+            => "–"
+    etf

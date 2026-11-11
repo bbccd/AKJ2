@@ -4,7 +4,7 @@
 // bestanden / fehlgeschlagen als Tabelle in der Chart-Mitte; Fehlschläge stehen zusätzlich in den Pine Logs.
 // Importzeile: <Benutzername> = TradingView-Benutzername des Veröffentlichers, Zahl = Version der Library.
 indicator("AKJ2.0 – Tests", shorttitle = "AKJ2.0 Tests", overlay = false)
-import bBccdde/AKJ2/2 as akj
+import bBccdde/AKJ2/3 as akj
 
 // ═══════════════════════════════════════════════════════════════════
 // MINI-TESTRAHMEN
@@ -22,6 +22,16 @@ checkF(string name, float got, float want) =>
 
 checkI(string name, int got, int want) =>
     checkF(name, got, want)
+
+checkB(string name, bool got, bool want) =>
+    checkF(name, got ? 1 : 0, want ? 1 : 0)
+
+checkS(string name, string got, string want) =>
+    if got == want
+        array.set(counts, 0, array.get(counts, 0) + 1)
+    else
+        array.set(counts, 1, array.get(counts, 1) + 1)
+        array.push(failed, name + ": erwartet „" + want + "“, erhalten „" + got + "“")
 
 // Standard-Puffer wie die Inputs des Indikators: Tick 0,01, 3 Ticks bis Kurs 100, darüber 0,3 ‰, Raster 0,50.
 bufStd(float price, int dir) =>
@@ -179,6 +189,43 @@ if barstate.islast
     bullP  = array.new<akj.Fvg>()
     akj.fvgInsert(bullP, akj.Fvg.new(96.0, 90.0, 1, 1, 1, 0))
     checkI("FVG hit: Short, bullisch 90–96 ragt in die Zone → Treffer", akj.fvgHit(bullP, noBear, -1, 100.0, 105.0) ? 1 : 0, 1)
+
+    // ── Setup-Verfall ──
+    checkB("Verfall: 10 Kerzen nach Start bei Grenze 10 → verfallen", akj.setupExpired(100, 90, 10), true)
+    checkB("Verfall: 9 Kerzen nach Start bei Grenze 10 → nicht",     akj.setupExpired(99, 90, 10), false)
+    checkB("Verfall: Grenze 0 = nie",                                 akj.setupExpired(1000, 0, 0), false)
+
+    // ── Kalendertage / Earnings-Fenster (Issue #1) ──
+    DAY = 86400000
+    NY  = "America/New_York"
+    d1110 = timestamp("UTC", 2026, 11, 10, 0, 0)
+    checkI("dayOf: 10.11. 14:30 UTC = 09:30 New York → 10.11.",      akj.dayOf(timestamp("UTC", 2026, 11, 10, 14, 30), NY), d1110)
+    checkI("dayOf: 10.11. 02:00 UTC = 09.11. 21:00 New York → 09.11.", akj.dayOf(timestamp("UTC", 2026, 11, 10, 2, 0), NY), d1110 - DAY)
+    checkI("dayOf: Mitternacht UTC bleibt derselbe Tag in UTC",       akj.dayOf(d1110, "UTC"), d1110)
+    checkI("earnDay: Termin 10.11. 21:05 UTC → 10.11. 00:00 UTC",     akj.earnDay(timestamp("UTC", 2026, 11, 10, 21, 5)), d1110)
+    checkI("earnDay: reines Datum (Mitternacht UTC) bleibt",          akj.earnDay(d1110), d1110)
+    checkB("earnDay: ohne Termin na",                                 na(akj.earnDay(int(na))), true)
+    win = 8 * DAY
+    checkB("Earnings-Fenster: Tag 02.11. = genau 8 Tage vorher → drin", akj.inEarnWin(d1110 - 8 * DAY, d1110 - 8 * DAY, d1110, win), true)
+    checkB("Earnings-Fenster: Tag 01.11. = 9 Tage vorher → draußen",   akj.inEarnWin(d1110 - 9 * DAY, d1110 - 9 * DAY, d1110, win), false)
+    checkB("Earnings-Fenster: Earnings-Tag selbst → drin",             akj.inEarnWin(d1110, d1110, d1110, win), true)
+    checkB("Earnings-Fenster: Tag danach → draußen",                   akj.inEarnWin(d1110 + DAY, d1110 + DAY, d1110, win), false)
+    checkB("Earnings-Fenster: Woche 26.–30.10. → draußen",             akj.inEarnWin(d1110 - 15 * DAY, d1110 - 11 * DAY, d1110, win), false)
+    checkB("Earnings-Fenster: Woche 02.–06.11. → drin",                akj.inEarnWin(d1110 - 8 * DAY, d1110 - 4 * DAY, d1110, win), true)
+    checkB("Earnings-Fenster: Woche 09.–13.11. (Termin Di) → drin",    akj.inEarnWin(d1110 - DAY, d1110 + 3 * DAY, d1110, win), true)
+    checkB("Earnings-Fenster: Woche 16.–20.11. → draußen",             akj.inEarnWin(d1110 + 6 * DAY, d1110 + 10 * DAY, d1110, win), false)
+    checkB("Earnings-Fenster: ohne Termin → draußen",                  akj.inEarnWin(d1110, d1110, int(na), win), false)
+    checkB("Earnings-Fenster: Fenster 0 Tage → nur der Earnings-Tag",  akj.inEarnWin(d1110 - DAY, d1110 - DAY, d1110, 0), false)
+
+    // ── Sektor-ETF ──
+    checkS("Sektor-ETF: Utilities → XLU",                             akj.sectorEtf("Utilities", "Electric Utilities"), "XLU")
+    checkS("Sektor-ETF: Finance → XLF",                               akj.sectorEtf("Finance", "Regional Banks"), "XLF")
+    checkS("Sektor-ETF: REIT (Industrie) → XLRE vor Finance",         akj.sectorEtf("Finance", "Real Estate Investment Trusts"), "XLRE")
+    checkS("Sektor-ETF: Internet-Dienste → XLC vor Technology Services", akj.sectorEtf("Technology Services", "Internet Software/Services"), "XLC")
+    checkS("Sektor-ETF: Discounter → XLP vor Retail Trade",           akj.sectorEtf("Retail Trade", "Discount Stores"), "XLP")
+    checkS("Sektor-ETF: Retail Trade sonst → XLY",                    akj.sectorEtf("Retail Trade", "Specialty Stores"), "XLY")
+    checkS("Sektor-ETF: ETF/Fonds → –",                               akj.sectorEtf("Miscellaneous", "Investment Trusts/Mutual Funds"), "–")
+    checkS("Sektor-ETF: leer → –",                                    akj.sectorEtf("", ""), "–")
 
 // ═══════════════════════════════════════════════════════════════════
 // ERGEBNIS: Tabelle in der Chart-Mitte, Fehlschläge zusätzlich in den Pine Logs
