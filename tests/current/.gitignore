@@ -1,0 +1,3 @@
+# Neue Chart-Exporte für den Regressionstest (python3 tests/compare_reference.py --all) – nicht versionieren.
+*
+!.gitignore

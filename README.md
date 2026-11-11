@@ -223,3 +223,10 @@ Tests laufen als eigenes Skript im Chart, weil Pine nicht lokal ausführbar ist:
 
 Stand: Indikator und Strategie enthalten die Logik noch selbst. Erst wenn die Testabdeckung der Library ausreicht,
 binden sie die Library ein und die eigenen Kopien entfallen.
+
+**Regressionstest gegen Chart-Exporte** (`tests/compare_reference.py`): Für Referenz-Symbole liegt je ein
+TradingView-Export (Chart-Menü → „Chart-Daten exportieren“, ISO-Zeit, Daily, Defaults, ADJ aus) in
+`tests/reference/`. Nach einer Änderung denselben Chart erneut exportieren, die Datei nach `tests/current/` legen
+(nicht versioniert) und `python3 tests/compare_reference.py --all` ausführen. Verglichen werden die Plots des
+Indikators Kerze für Kerze bis zur vorletzten Kerze der Referenz; jede Abweichung wird mit Datum gemeldet.
+Der Dateiname aus TradingView („BATS_XLU, 1D_<Hash>.csv“) kann bleiben, der Hash wird ignoriert.
