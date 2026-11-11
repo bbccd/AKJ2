@@ -10,15 +10,11 @@ strategy("AKJ2.0 – Strategie (Backtest)", shorttitle = "AKJ2.0 S", overlay = t
 // ═══════════════════════════════════════════════════════════════════
 // EINSTELLUNGEN
 // ═══════════════════════════════════════════════════════════════════
-G_RANGE = "Zeitraum"
-startDate = input.time(timestamp("2020-01-01"), "Startdatum", group = G_RANGE)
-endDate   = input.time(timestamp("2099-12-31"), "Enddatum", group = G_RANGE)
-
-G_TREND = "Trend"
+G_TREND = "Regeln – Trend"
 bbLen     = input.int(10, "BB Länge", minval = 1, group = G_TREND)
 bbMult    = input.float(1.0, "BB Standardabweichung", minval = 0.1, step = 0.1, group = G_TREND)
 
-G_SETUP = "Setup & Entry"
+G_SETUP = "Regeln – Setup & Entry"
 enableLong  = input.bool(true, "Long-Setups", group = G_SETUP)
 enableShort = input.bool(true, "Short-Setups", group = G_SETUP)
 wrLen       = input.int(4, "Williams %R Länge", minval = 1, group = G_SETUP)
@@ -35,7 +31,7 @@ riskFilter  = input.bool(true, "Risiko-Filter", group = G_SETUP, tooltip = "Risi
 riskMin     = input.float(2.0, "Risiko min. / max. (%)", minval = 0.0, step = 0.1, group = G_SETUP, inline = "risk")
 riskMax     = input.float(7.0, "", minval = 0.0, step = 0.1, group = G_SETUP, inline = "risk")
 
-G_EARN = "Earnings"
+G_EARN = "Regeln – Earnings"
 hideNearEarn = input.bool(true, "Keine Orders im Sperrfenster", group = G_EARN, tooltip = "Greift nur für den nächsten Earnings-Termin, nicht für vergangene (Backtest).")
 earnDays     = input.int(8, "Sperrfenster (Kalendertage vor Earnings)", minval = 0, maxval = 21, group = G_EARN)
 
@@ -44,6 +40,10 @@ maxDD        = input.float(2000.0, "Max. Drawdown ($)", minval = 1.0, step = 100
 riskPerTrade = input.float(1.0, "Risiko pro Trade (% vom Max. Drawdown)", minval = 0.01, step = 0.1, group = G_BT, tooltip = "Default: 1 % von 2000 $ = 20 $ Risiko pro Trade. Stückzahl = Risikobetrag / |Entry − SL|, abgerundet auf ganze Stück.")
 exitMode     = input.string("Trailing BB-Mittelband", "Ausstieg", options = ["CRV 1:1 (komplett)", "Trailing BB-Mittelband"], group = G_BT, tooltip = "CRV 1:1: gesamte Position bei Ziel = Entry ± Risiko schließen. Trailing: bei CRV 1:1 SL auf Einstand, danach SL am BB-Mittelband nachziehen (nur in Gewinnrichtung).")
 trailLongOnly = input.bool(true, "Trailing nur für Long (Short immer CRV 1:1)", group = G_BT)
+
+G_RANGE = "Zeitraum"
+startDate = input.time(timestamp("2020-01-01"), "Startdatum", group = G_RANGE)
+endDate   = input.time(timestamp("2099-12-31"), "Enddatum", group = G_RANGE)
 
 // ═══════════════════════════════════════════════════════════════════
 // FUNKTIONEN (aus dem Indikator kopiert)

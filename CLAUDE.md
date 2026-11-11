@@ -39,13 +39,24 @@ und meldet Fehler zurück.
   (BB-Farben, Trigger-Hintergrund) soll erhalten bleiben; Farben jetzt türkis (Long) / pink (Short), da der Nutzer einen weiteren Indikator mit grün/roten Balken nutzt. Die senkrechten UP/DOWN-Linien wurden
   auf Wunsch entfernt (lassen sich nicht auf die Grenze zwischen zwei Kerzen legen; Hintergrund zeigt sie).
   Hintergrund zeigt standardmäßig den Trigger (beide TFs Kauf = türkis, beide Verkauf = pink, sonst keiner);
-  reiner Weekly-Hintergrund wie in AKJ2 per Setting wählbar.
+  reiner Hintergrund des übergeordneten Trends wie in AKJ2 per Setting „Übergeordneter Trend“ wählbar
+  (hieß bis Nov. 2026 „Weekly-Trend“).
+- Einstellungen (Nov. 2026 umgebaut): Gruppen „Regeln – …“ (Spielweise & Trend, Setup & Entry, Earnings, Fair
+  Value Gaps) zuerst, dann „Anzeige – …“ (Trend & Setup, Moving Averages, Zusatzinfos), zuletzt „Zeitraum“.
+  Farbe/Dicke/Linienart von plot()/fill() (BB, BB-Füllung, MAs, Entry/SL) sind KONSTANT im Code, damit sie im
+  Reiter „Style“ erscheinen (TradingView zeigt sie dort nur bei konstanten Werten) – keine Inputs dafür anlegen.
+  Bedingte Farben (bgcolor für Regime/aktuelles Setup, Labels, Tabellen, line.new) kann der Style-Reiter nicht →
+  bleiben Inputs. Datenfenster-Plots (Screener, Diagnose) und per Input gesteuerte bgcolor() haben `editable = false`, damit der
+  Style-Reiter nur Linien/Füllungen zeigt (BB, MAs, Entry/SL); ohne das konnte man die Screener-Plots dort versehentlich
+  im Chart einschalten. Input-Titel sind die Schlüssel gespeicherter Werte: Umbenennen setzt sie beim Nutzer zurück;
+  Reihenfolge/Gruppe ändern ist unkritisch. Inline-Zeilen: Titel nur am ersten Input (sonst Editor-Warnung).
 
 - BB-Füllung zwischen den Bändern (Issue #15): Grau #787B86 mit 8 % Deckkraft (#787B8614), Default an,
-  abschaltbar; bewusst schwächer als Trigger- (25 %) und Earnings-Hintergrund (45 %), hell/dunkel tauglich.
+  im Style-Reiter abschaltbar; bewusst schwächer als Trigger- (25 %) und Earnings-Hintergrund (45 %), hell/dunkel tauglich.
 - Moving Averages im Indikator (nur Anzeige, keine Setup-Logik): 20/50/150/200, SMA/EMA für alle gemeinsam,
-  Dicke + Linienart gemeinsam, jede MA einzeln + Paket gesamt abschaltbar. Farben wie TradingView-„MA Ribbon“
-  (Gelb → Orange → Rot = kurz → lang); 200er-Rot liegt nahe an SL-Linie/unterem BB – ggf. anpassen.
+  jede MA einzeln + Paket gesamt abschaltbar; Farbe, Dicke (3), Linienart (gestrichelt) je MA im Style-Reiter.
+  Farben wie TradingView-„MA Ribbon“ (Gelb → Orange → Rot = kurz → lang); 200er-Rot liegt nahe an
+  SL-Linie/unterem BB – ggf. anpassen.
 - Zusatzinfos (Gruppe „Zusatzinfos“, nur Anzeige): All-Time High als dicke Linie (extend.both) + Label
   „All-Time High <Preis>“, Buttergelb #FFE135 (bewusst heller als MA 20 #F6C309). ATH aus Monatsdaten
   (ganze Historie) + Chart-Kerzen (laufender Monat).

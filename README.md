@@ -33,7 +33,11 @@ D + 4h: 4h-Chart mit regulären Handelszeiten verwenden (keine Extended Hours). 
   SPDR) ist eine eigene Näherung (TradingView-Sektoren ≠ GICS) und gilt nur für S&P-500-Aktien – die
   Mitgliedschaft liefert Pine nicht, daher „evtl.“. Index-Mitgliedschaft und Heimatbörse liefert Pine nicht.
 - Moving Averages 20 / 50 / 150 / 200 (SMA oder EMA), Farbverlauf Gelb → Orange → Rot von kurz nach lang;
-  einzeln und gesamt abschaltbar, Typ, Dicke und Linienart gemeinsam einstellbar
+  einzeln und gesamt abschaltbar, Typ gemeinsam einstellbar; Farbe, Dicke und Linienart je MA im Reiter „Style“
+- Einstellungen: Reiter „Inputs“ zuerst die Regeln (Spielweise & Trend, Setup & Entry, Earnings, Fair Value
+  Gaps – beeinflussen Signale und Screener), dann die Darstellung (Trend & Setup, Moving Averages,
+  Zusatzinfos), zuletzt der Zeitraum. Farbe/Dicke von Bollinger-Bändern, BB-Füllung, MAs und Entry-/SL-Linien
+  stehen im Reiter „Style“; bedingte Hintergründe (Regime, aktuelles Setup) bleiben im Reiter „Inputs“.
 - Hintergrund: türkis = Long-Trigger, pink = Short-Trigger (Farben einstellbar)
 - **Regimewechsel:** Steht nach dem Close der jüngsten Kerze fest, dass sich das Regime ändert, wird die Stelle
   der noch nicht vorhandenen nächsten Kerze in der neuen Regime-Farbe hinterlegt; gibt es kein neues Regime,
