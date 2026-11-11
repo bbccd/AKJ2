@@ -1,5 +1,8 @@
 //@version=6
 indicator("AKJ2.0 – Trend & Setup Detector", shorttitle = "AKJ2.0", overlay = true, max_labels_count = 500, max_boxes_count = 500)
+// Logik (Trend, Puffer, Setup-Zustandsautomat, FVGs, Earnings-Kalender, Sektor-ETF) liegt in der Library akj_lib.pine
+// (privat veröffentlicht, Tests in tests/akj_tests.pine). Dieses Skript enthält nur Inputs, Abrufe und Darstellung.
+import bBccdde/AKJ2/5 as akj
 
 // Zweck: Aktien schnell auf mögliche Setups scannen. Bewusst kein Trade-Management und
 // keine Entry-/Exit-Marker – das kommt später in die strategy()-Version.
@@ -110,159 +113,10 @@ sigShortCol = color.new(bgShortCol, 0)
 // ═══════════════════════════════════════════════════════════════════
 // FUNKTIONEN
 // ═══════════════════════════════════════════════════════════════════
-// Latched Trend: 1 = Kauf (2x Close > oberes BB), -1 = Verkauf (2x Close < unteres BB).
-// Wechselt nur, wenn der Trigger in die Gegenrichtung kommt.
-bbTrendState(simple int len, simple float mult) =>
-    [mid, up, lo] = ta.bb(close, len, mult)
-    var int state = 0
-    if close > up and close[1] > up[1]
-        state := 1
-    else if close < lo and close[1] < lo[1]
-        state := -1
-    state
-
-// Puffer in Preiseinheiten (Issue #24): bis zur Schwelle fest X Ticks, darüber Y ‰ vom Kurs, auf den Tick aufgerundet.
-priceBuffer(float price) =>
-    raw = price > bufThresh ? price * bufPermille / 1000.0 : bufTicks * syminfo.mintick
-    math.ceil(raw / syminfo.mintick - 1e-6) * syminfo.mintick
-
-// Entry- bzw. SL-Level: Bezugskurs ± Puffer. dir = 1: Level über dem Kurs (Long-Entry, Short-SL),
-// dir = -1: darunter (Long-SL, Short-Entry).
-// Glatte Zahlen meiden (Issue #24): Liegt die nächste Rasterstufe (z. B. ganzer/halber Dollar) in Richtung dir
-// näher als Level + ein weiterer Puffer, wird das Level einen Puffer jenseits dieser Stufe gelegt.
-bufLevel(float price, int dir) =>
-    buf = priceBuffer(price)
-    lvl = price + dir * buf
-    if roundAvoid and roundStep > 0
-        r = (dir == 1 ? math.ceil(price / roundStep - 1e-6) : math.floor(price / roundStep + 1e-6)) * roundStep
-        if dir * (lvl + dir * buf - r) > 0
-            lvl := r + dir * buf
-    math.round_to_mintick(lvl)
-
-// Hook fürs Refinement: Wann verfällt ein offenes Setup (Stop-Order noch nicht erreicht)?
-setupExpired(int startBar) =>
-    expiryBars > 0 and bar_index - startBar >= expiryBars
-
-// Moving Average je nach Typ (beide berechnen, damit die ta-Funktionen auf jeder Kerze laufen).
-maCalc(simple int len) =>
-    e = ta.ema(close, len)
-    s = ta.sma(close, len)
-    maType == "EMA" ? e : s
-
-// TradingView-Sektor (FactSet-Einteilung) → SPDR-Sektor-ETF (GICS). Näherung; bekannte Abweichungen über
-// die Industrie korrigiert (REITs → XLRE, Internet-Dienste wie Alphabet/Meta → XLC, Discounter → XLP).
-sectorEtf(string sec, string ind) =>
-    string etf = "–"
-    if str.contains(ind, "Real Estate")
-        etf := "XLRE"
-    else if ind == "Internet Software/Services"
-        etf := "XLC"
-    else if ind == "Food Retail" or ind == "Discount Stores"
-        etf := "XLP"
-    else
-        etf := switch sec
-            "Technology Services"    => "XLK"
-            "Electronic Technology"  => "XLK"
-            "Communications"         => "XLC"
-            "Consumer Services"      => "XLY"
-            "Consumer Durables"      => "XLY"
-            "Retail Trade"           => "XLY"
-            "Consumer Non-Durables"  => "XLP"
-            "Health Technology"      => "XLV"
-            "Health Services"        => "XLV"
-            "Finance"                => "XLF"
-            "Energy Minerals"        => "XLE"
-            "Utilities"              => "XLU"
-            "Non-Energy Minerals"    => "XLB"
-            "Process Industries"     => "XLB"
-            "Producer Manufacturing" => "XLI"
-            "Industrial Services"    => "XLI"
-            "Commercial Services"    => "XLI"
-            "Distribution Services"  => "XLI"
-            "Transportation"         => "XLI"
-            => "–"
-    etf
-
-// Fair Value Gap: Lücke über drei Kerzen. Bullisch: Tief[0] > Hoch[2], bärisch: Hoch[0] < Tief[2].
-// top/bot = noch ungefüllter Rest der Lücke (wird beim Anlaufen verkleinert).
-type Fvg
-    float top
-    float bot
-    int   dir            // 1 = bullisch, -1 = bärisch
-    int   tfId           // 0 = 4h, 1 = Daily, 2 = Weekly, 3 = Monthly
-    int   idx            // Nummer der jüngsten der drei Kerzen in ihrem TF (für die Rückschau)
-    int   t              // Startzeit der ältesten der drei Kerzen (nur für die Anzeige)
-    bool  dead = false   // gefüllt oder Rückschau abgelaufen (wird aus den Listen nach und nach entfernt)
-
-// Performance (Issue #21): FVGs liegen in zwei SORTIERTEN Listen – bullisch absteigend nach top (nächstes unter
-// dem Kurs zuerst), bärisch aufsteigend nach bot (nächstes über dem Kurs zuerst). Füllen und Treffer-Prüfung
-// brechen ab, sobald ein FVG außer Reichweite liegt, statt jede Kerze alle FVGs zu durchlaufen.
-fvgInsert(array<Fvg> list, Fvg f) =>
-    n = list.size()
-    int i = 0
-    while i < n and (f.dir == 1 ? list.get(i).top > f.top : list.get(i).bot < f.bot)
-        i += 1
-    list.insert(i, f)
-
-// Neues FVG anlegen (falls Lücke): in die sortierte Liste und in die Ablauf-Warteschlange seines TF. Rückgabe 1/0.
-fvgAdd(array<Fvg> bull, array<Fvg> bear, array<Fvg> queue, int tfId, float h0, float l0, float h2, float l2, int t2, int idx) =>
-    Fvg f = na
-    if l0 > h2
-        f := Fvg.new(l0, h2, 1, tfId, idx, t2)
-    else if h0 < l2
-        f := Fvg.new(l2, h0, -1, tfId, idx, t2)
-    if not na(f)
-        fvgInsert(f.dir == 1 ? bull : bear, f)
-        queue.push(f)
-    na(f) ? 0 : 1
-
-// Rückschau: Warteschlange je TF in Entstehungsreihenfolge – vorne liegt immer das älteste FVG, also reicht es,
-// vorne abzuarbeiten, bis eines noch nicht abgelaufen ist. Rückgabe: Anzahl neu abgelaufener FVGs.
-fvgExpire(array<Fvg> queue, int cnt, int lb) =>
-    int killed = 0
-    while queue.size() > 0
-        f = queue.first()
-        if f.dead
-            queue.shift()
-        else if cnt - f.idx > lb
-            f.dead := true
-            queue.shift()
-            killed += 1
-        else
-            break
-    killed
-
-// Füllen mit der aktuellen Kerze: nur die vorderen FVGs der Liste können betroffen sein. Rückgabe: Anzahl gefüllter.
-fvgFill(array<Fvg> list, bool bull, float lo, float hi) =>
-    int filled = 0
-    int i = 0
-    while i < list.size()
-        f = list.get(i)
-        if f.dead
-            list.remove(i)
-        else if bull ? lo < f.top : hi > f.bot
-            if bull ? lo <= f.bot : hi >= f.top
-                f.dead := true
-                list.remove(i)
-                filled += 1
-            else
-                f.top := bull ? lo : f.top
-                f.bot := bull ? f.bot : hi
-                i += 1
-        else
-            break
-    filled
-
-// Erledigte FVGs aus einer Liste entfernen (nur gelegentlich nötig, damit die Listen nicht wachsen).
-fvgCompact(array<Fvg> list) =>
-    n = list.size()
-    if n > 0
-        for i = n - 1 to 0
-            if list.get(i).dead
-                list.remove(i)
+// Trend, Puffer, Setup, FVG-Listen, Earnings-Kalender, Sektor-ETF: siehe Library (akj.*).
 
 // Kasten für ein offenes FVG zeichnen (erledigte werden übersprungen).
-fvgBox(array<box> boxes, Fvg f) =>
+fvgBox(array<box> boxes, akj.Fvg f) =>
     if not f.dead
         tfTxt = f.tfId == 0 ? "4h" : f.tfId == 1 ? "D" : f.tfId == 2 ? "W" : "M"
         col   = f.dir == 1 ? fvgBullCol : fvgBearCol
@@ -302,7 +156,7 @@ wr = ta.wpr(wrLen)
 
 // Der Trigger steht erst mit dem Close der Trigger-Kerze fest. Das Regime gilt deshalb ab der
 // Kerze DANACH (Grenze zwischen Trigger-Kerze und Folgekerze) – auch auf der laufenden Kerze.
-chartStateNext = bbTrendState(bbLen, bbMult)
+chartStateNext = akj.bbTrendState(close, bbLen, bbMult)
 chartState     = chartStateNext[1]
 wrClosed   = barstate.isconfirmed ? wr : wr[1]
 // Höhere TFs – Performance (Issue #21): EIN Abruf je Zeiteinheit (D, W, M) liefert alles, was gebraucht wird
@@ -312,7 +166,7 @@ wrClosed   = barstate.isconfirmed ? wr : wr[1]
 // Trend nicht ein zweites Mal über request.security.
 // Werte mit [1] + lookahead = zuletzt ABGESCHLOSSENE Kerze (kein Repainting); s0 = Zustand inkl. laufender Kerze.
 htfData() =>
-    s = bbTrendState(bbLen, bbMult)
+    s = akj.bbTrendState(close, bbLen, bbMult)
     [s[1], s, high[1], low[1], high[3], low[3], time[3], time[1], ta.max(high)[1]]
 htfReq(simple bool need, simple string tf) =>
     if need
@@ -354,19 +208,15 @@ nextEarn   = earnings.future_time
 daysToEarn = na(nextEarn) ? na : (nextEarn - time) / DAY_MS
 // Vergleich nach Kalendertagen, nicht nach Uhrzeit: Bei Zahlen vor Börsenbeginn liegt der Termin vor dem
 // Kerzenbeginn (9:30) – der Earnings-Tag fiel sonst aus dem Fenster (Issue #1).
-// Kalendertag (Mitternacht UTC) eines Zeitpunkts in der Börsen-Zeitzone.
-dayOf(int t) =>
-    timestamp("UTC", year(t, syminfo.timezone), month(t, syminfo.timezone), dayofmonth(t, syminfo.timezone), 0, 0)
+// Kalendertag (Mitternacht UTC) eines Zeitpunkts in der Börsen-Zeitzone: akj.dayOf.
 // Earnings-Tag als UTC-Datum: stimmt für Termine mit Uhrzeit (vor Börsenbeginn bis abends) wie für reine
 // Datumsangaben (Mitternacht UTC – in New Yorker Zeit wäre das schon der Vortag).
-earnDay    = na(nextEarn) ? int(na) : int(nextEarn) - int(nextEarn) % DAY_MS
-// Liegt der Zeitraum [firstDay, lastDay] (Kalendertage) im Sperrfenster [Earnings-Tag − x Tage, Earnings-Tag]?
-inEarnWin(int firstDay, int lastDay) =>
-    not na(earnDay) and lastDay >= earnDay - earnWinMs and firstDay <= earnDay
-barFirstDay = dayOf(time)
-barLastDay  = dayOf(time_close - 1)   // − 1 ms: falls das Kerzenende als Mitternacht des Folgetags geliefert wird
+earnDay    = akj.earnDay(int(nextEarn))
+// Liegt der Zeitraum [firstDay, lastDay] (Kalendertage) im Sperrfenster [Earnings-Tag − x Tage, Earnings-Tag]? akj.inEarnWin.
+barFirstDay = akj.dayOf(time, syminfo.timezone)
+barLastDay  = akj.dayOf(time_close - 1, syminfo.timezone)   // − 1 ms: falls das Kerzenende als Mitternacht des Folgetags geliefert wird
 // Kerze liegt im Sperrfenster, wenn einer ihrer Tage darin liegt (Daily wie Weekly).
-earnSoon   = inEarnWin(barFirstDay, barLastDay)
+earnSoon   = akj.inEarnWin(barFirstDay, barLastDay, earnDay, earnWinMs)
 earnBlock  = hideNearEarn and earnSoon
 // Vergangene Earnings: Kerze, auf der TradingView die neuen Zahlen liefert.
 pastEarn   = request.earnings(syminfo.tickerid, earnings.actual, gaps = barmerge.gaps_on, lookahead = barmerge.lookahead_on, ignore_invalid_symbol = true)
@@ -384,60 +234,24 @@ pastEarnCol(int k) =>
 // Zeigt nur, ob ein Setup besteht und wo Entry (Stop-Order) und SL lägen.
 // Wird der Entry erreicht, endet das Setup – kein Trade-Management.
 // ═══════════════════════════════════════════════════════════════════
-var int   setupDir   = 0     // 0 = kein Setup, 1 = Long, -1 = Short
-var int   setupStart = na
-var float entryLvl   = na
-var float slLvl      = na
-
-bool evNewSetup  = false
-bool evMoveSetup = false
-int  evTrigDir   = 0         // Richtung des Setups, dessen Entry auf diesem Bar erreicht wurde
-
-// 1) Offenes Setup: Zuerst Abbruch prüfen – Trigger weg, Earnings, Verfall stehen schon zur
-//    Eröffnung fest (dann würde man die Order vor Handelsbeginn löschen). Danach: Entry erreicht?
-//    Gaps ohne Auslösung zählen nicht.
-if setupDir != 0
-    trendLost = setupDir == 1 ? not longTrend : not shortTrend
-    if trendLost or earnBlock or setupExpired(setupStart)
-        setupDir := 0
-    else if setupDir == 1 ? high >= entryLvl : low <= entryLvl
-        evTrigDir := setupDir
-        setupDir  := 0
-// Close dieser Kerze ist der Gegentrigger: Setup endet sofort, nicht erst auf der Folgekerze.
-if barstate.isconfirmed and setupDir != 0 and not (setupDir == 1 ? longNext : shortNext)
-    setupDir := 0
-
-// 2) Neues Setup: Trigger aktiv, rote (Long) / grüne (Short) Kerze, %R-Close im Extrembereich.
-//    Nachziehen laut Guide: Solange das Setup offen ist, zieht jeder weitere Downday (Long)
-//    bzw. Upday (Short) den Entry auf die neue Kerze nach.
-//    SL: liegt immer unter dem tiefsten Tief (Long) bzw. über dem höchsten Hoch (Short) seit der
-//    ersten Signalkerze – auch Kerzen ohne Signal ziehen ihn nach. Er wandert nie zurück in die Bewegung.
-longSig  = tradeChart and inRange and enableLong  and longTrend  and longNext  and close < open and wr <= wrLongLvl  and not earnBlock
-shortSig = tradeChart and inRange and enableShort and shortTrend and shortNext and close > open and wr >= wrShortLvl and not earnBlock
-moveSig  = setupDir == 1 ? close < open : setupDir == -1 ? close > open : false
-
-if barstate.isconfirmed and evTrigDir == 0
-    newDir = setupDir != 0 ? (moveSig ? setupDir : 0) : longSig ? 1 : shortSig ? -1 : 0
-    if newDir != 0
-        barSl = newDir == 1 ? bufLevel(low, -1) : bufLevel(high, 1)
-        if setupDir == 0
-            evNewSetup := true
-            setupStart := bar_index
-            slLvl      := barSl
-        else
-            evMoveSetup := true
-            slLvl      := newDir == 1 ? math.min(slLvl, barSl) : math.max(slLvl, barSl)
-        setupDir := newDir
-        entryLvl := newDir == 1 ? bufLevel(high, 1) : bufLevel(low, -1)
-    else if setupDir != 0
-        // Kerze ohne Signal (Long: grün, Short: rot): Entry bleibt, SL folgt einem neuen Extrem der Bewegung.
-        barSl = setupDir == 1 ? bufLevel(low, -1) : bufLevel(high, 1)
-        slLvl := setupDir == 1 ? math.min(slLvl, barSl) : math.max(slLvl, barSl)
+// Zustandsautomat in der Library (akj.setupStep, Regeln siehe dort; Tests in tests/akj_tests.pine). Die Regeln
+// bündeln die Inputs; der Zustand liegt in EINER var-Variablen und wird je Kerze durch eine Kopie ersetzt
+// (rollback-sicher auf laufenden Kerzen). Die Ereignisse der Kerze stehen im Zustand.
+rules = akj.Rules.new(enableLong, enableShort, wrLongLvl, wrShortLvl, expiryBars, syminfo.mintick, bufTicks, bufThresh, bufPermille, roundAvoid, roundStep)
+var akj.Setup st = akj.Setup.new()
+st := akj.setupStep(st, rules, open, high, low, close, wr, bar_index, barstate.isconfirmed, tradeChart and inRange, longTrend, shortTrend, longNext, shortNext, earnBlock)
+setupDir    = st.dir         // 0 = kein Setup, 1 = Long, -1 = Short
+setupStart  = st.startBar
+entryLvl    = st.entry
+slLvl       = st.sl
+evNewSetup  = st.isNew
+evMoveSetup = st.moved
+evTrigDir   = st.trigDir     // Richtung des Setups, dessen Entry auf diesem Bar erreicht wurde
 
 // 3) Risiko-Filter: prozentuales Risiko = |Entry − SL| / Entry. Filtert nur die Anzeige (Linien, Marker,
 //    Hervorhebung, Alerts, Screener) – das Setup läuft intern weiter, da sich das Risiko beim Nachziehen ändert.
 hasLvls  = setupDir != 0 or evTrigDir != 0
-riskPct  = hasLvls ? math.abs(entryLvl - slLvl) / entryLvl * 100 : na
+riskPct  = hasLvls ? akj.riskPct(entryLvl, slLvl) : na
 riskOk   = not riskFilter or (riskPct >= riskMin and riskPct <= riskMax)
 
 // ═══════════════════════════════════════════════════════════════════
@@ -454,12 +268,12 @@ dNew = not na(dT) and (na(dT[1]) or dT != dT[1])     // neue Daily-Kerze abgesch
 wNew = not na(wT) and (na(wT[1]) or wT != wT[1])     // neue Weekly-Kerze abgeschlossen
 mNew = not na(mT) and (na(mT[1]) or mT != mT[1])     // neue Monthly-Kerze abgeschlossen
 
-var fvgBull  = array.new<Fvg>()   // bullisch, absteigend nach top
-var fvgBear  = array.new<Fvg>()   // bärisch, aufsteigend nach bot
-var fvgQ4h   = array.new<Fvg>()   // Ablauf-Warteschlangen je TF (Entstehungsreihenfolge)
-var fvgQD    = array.new<Fvg>()
-var fvgQW    = array.new<Fvg>()
-var fvgQM    = array.new<Fvg>()
+var fvgBull  = array.new<akj.Fvg>()   // bullisch, absteigend nach top
+var fvgBear  = array.new<akj.Fvg>()   // bärisch, aufsteigend nach bot
+var fvgQ4h   = array.new<akj.Fvg>()   // Ablauf-Warteschlangen je TF (Entstehungsreihenfolge)
+var fvgQD    = array.new<akj.Fvg>()
+var fvgQW    = array.new<akj.Fvg>()
+var fvgQM    = array.new<akj.Fvg>()
 var int fvgAlive = 0              // Anzahl offener FVGs
 var int dCnt = 0
 var int wCnt = 0
@@ -471,48 +285,37 @@ if fvgOn and barstate.isconfirmed
     if dNew
         dCnt += 1
         if chartTfId < 1 and fvgUseD and not na(dH2)
-            fvgAlive += fvgAdd(fvgBull, fvgBear, fvgQD, 1, dH, dL, dH2, dL2, dT2, dCnt)
+            fvgAlive += akj.fvgAdd(fvgBull, fvgBear, fvgQD, 1, dH, dL, dH2, dL2, dT2, dCnt)
     if wNew
         wCnt += 1
         if chartTfId < 2 and fvgUseW and not na(wH2)
-            fvgAlive += fvgAdd(fvgBull, fvgBear, fvgQW, 2, wH, wL, wH2, wL2, wT2, wCnt)
+            fvgAlive += akj.fvgAdd(fvgBull, fvgBear, fvgQW, 2, wH, wL, wH2, wL2, wT2, wCnt)
     if mNew
         mCnt += 1
         if chartTfId < 3 and fvgUseM and not na(mH2)
-            fvgAlive += fvgAdd(fvgBull, fvgBear, fvgQM, 3, mH, mL, mH2, mL2, mT2, mCnt)
+            fvgAlive += akj.fvgAdd(fvgBull, fvgBear, fvgQM, 3, mH, mL, mH2, mL2, mT2, mCnt)
     // 2) Rückschau abgelaufen → erledigt (Alter wie bisher: Chart-TF in Kerzen, höhere TFs über ihre Zähler)
-    fvgAlive -= fvgExpire(fvgQ4h, bar_index, fvgLb4h)
-    fvgAlive -= fvgExpire(fvgQD, chartTfId == 1 ? bar_index : dCnt, fvgLbD)
-    fvgAlive -= fvgExpire(fvgQW, chartTfId == 2 ? bar_index : wCnt, fvgLbW)
-    fvgAlive -= fvgExpire(fvgQM, mCnt, fvgLbM)
+    fvgAlive -= akj.fvgExpire(fvgQ4h, bar_index, fvgLb4h)
+    fvgAlive -= akj.fvgExpire(fvgQD, chartTfId == 1 ? bar_index : dCnt, fvgLbD)
+    fvgAlive -= akj.fvgExpire(fvgQW, chartTfId == 2 ? bar_index : wCnt, fvgLbW)
+    fvgAlive -= akj.fvgExpire(fvgQM, mCnt, fvgLbM)
     // 3) Komplett gefüllt → erledigt; teilweise gefüllt → Rest verkleinern (nur die vorderen FVGs betroffen)
-    fvgAlive -= fvgFill(fvgBull, true, low, high)
-    fvgAlive -= fvgFill(fvgBear, false, low, high)
+    fvgAlive -= akj.fvgFill(fvgBull, true, low, high)
+    fvgAlive -= akj.fvgFill(fvgBear, false, low, high)
     // 4) Neues FVG im Chart-TF (diese Kerze ist die jüngste der drei)
     chartUse = chartTfId == 0 ? fvgUse4h : chartTfId == 1 ? fvgUseD : fvgUseW
     chartQ   = chartTfId == 0 ? fvgQ4h : chartTfId == 1 ? fvgQD : fvgQW
     if chartUse and bar_index >= 2
-        fvgAlive += fvgAdd(fvgBull, fvgBear, chartQ, chartTfId, high, low, high[2], low[2], time[2], bar_index)
+        fvgAlive += akj.fvgAdd(fvgBull, fvgBear, chartQ, chartTfId, high, low, high[2], low[2], time[2], bar_index)
     if fvgBull.size() > FVG_MAX
-        fvgCompact(fvgBull)
+        akj.fvgCompact(fvgBull)
     if fvgBear.size() > FVG_MAX
-        fvgCompact(fvgBear)
+        akj.fvgCompact(fvgBear)
 
 // Liegt ein gegenläufiges FVG im Gewinnbereich [Entry, Ziel 1:1]? (jede Überlappung zählt)
 // Sortierte Listen: Long prüft bärische ab dem nächsten über dem Kurs, Short bullische ab dem nächsten darunter;
 // Abbruch, sobald ein FVG jenseits der Zone beginnt.
-bool fvgHitCalc = false
-if setupDir != 0 and fvgAlive > 0
-    r   = math.abs(entryLvl - slLvl)
-    zLo = setupDir == 1 ? entryLvl : entryLvl - r
-    zHi = setupDir == 1 ? entryLvl + r : entryLvl
-    hitList = setupDir == 1 ? fvgBear : fvgBull
-    for f in hitList
-        if setupDir == 1 ? f.bot >= zHi : f.top <= zLo
-            break
-        if not f.dead and f.bot < zHi and f.top > zLo
-            fvgHitCalc := true
-            break
+fvgHitCalc = setupDir != 0 and fvgAlive > 0 and akj.fvgHit(fvgBull, fvgBear, setupDir, entryLvl, slLvl)
 // Kerze, auf der der Entry erreicht wird: Zustand des Setups von der Vorkerze (als die Order lag).
 fvgInZone = setupDir != 0 ? fvgHitCalc : evTrigDir != 0 ? fvgHitCalc[1] : false   // gemessen, immer
 fvgHit    = fvgFilter and fvgInZone                                                // wirkt nur mit Filter
@@ -545,10 +348,10 @@ pBbLower = plot(showBB ? lower : na, "BB Lower", color.new(color.red, 40), 3)
 fill(pBbUpper, pBbLower, #787B8614, "BB Füllung")
 
 // Moving Averages (unabhängig von der Setup-Logik, nur zur Orientierung)
-ma1 = maCalc(ma1Len)
-ma2 = maCalc(ma2Len)
-ma3 = maCalc(ma3Len)
-ma4 = maCalc(ma4Len)
+ma1 = akj.maCalc(close, ma1Len, maType)
+ma2 = akj.maCalc(close, ma2Len, maType)
+ma3 = akj.maCalc(close, ma3Len, maType)
+ma4 = akj.maCalc(close, ma4Len, maType)
 // Plot-Titel müssen konstant sein – sie nennen die Standardlänge (bei geänderter Länge nicht mehr exakt).
 // Farbe, Dicke, Linienart im Reiter „Style“; Farbverlauf kurz → lang wie im TradingView-„MA Ribbon“: Gelb → Orange → Rot.
 plot(maShow and ma1On ? ma1 : na, "MA 20", #F6C309, 3, linestyle = plot.linestyle_dashed)
@@ -580,7 +383,7 @@ bgcolor(earnBgOn and earnSoon ? EARN_COL : na, title = "Earnings-Sperrfenster", 
 // den normalen Kerzen über der Regime-Farbe.
 // 4h: Die nächste Kerze liegt am selben Tag, außer nach der letzten Kerze der Sitzung.
 nextBarShift = (isWeekly ? 7 : timeframe.isintraday and not session.islastbar_regular ? 0 : dayofweek == dayofweek.friday ? 3 : 1) * DAY_MS
-earnNextBar  = inEarnWin(barFirstDay + nextBarShift, barLastDay + nextBarShift)
+earnNextBar  = akj.inEarnWin(barFirstDay + nextBarShift, barLastDay + nextBarShift, earnDay, earnWinMs)
 bgcolor(regNextShow and regBarDone and earnBgOn and earnNextBar ? EARN_COL : na, offset = 1, title = "Earnings-Sperrfenster nächste Kerze", editable = false)
 bgcolor(pastEarnCol(0),  offset = 0,   editable = false)
 bgcolor(pastEarnCol(1),  offset = -1,  editable = false)
@@ -717,7 +520,7 @@ var table symTbl = table.new(position.top_center, 3, 2, border_width = 0)
 if symInfoShow and barstate.islast
     sec    = na(syminfo.sector) ? "" : syminfo.sector
     ind    = na(syminfo.industry) ? "" : syminfo.industry
-    etf    = syminfo.currency == "USD" ? sectorEtf(sec, ind) : "–"
+    etf    = syminfo.currency == "USD" ? akj.sectorEtf(sec, ind) : "–"
     table.cell(symTbl, 0, 0, "", height = symInfoGap)
     table.merge_cells(symTbl, 0, 0, 2, 0)
     table.cell(symTbl, 0, 1, sec == "" ? "–" : sec, bgcolor = SYM_BG, text_color = chart.fg_color, text_size = size.small, tooltip = "Sektor (TradingView)")

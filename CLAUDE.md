@@ -28,11 +28,12 @@ und meldet Fehler zurück.
   `import bBccdde/AKJ2/<Version> as akj` (TradingView-Benutzername bBccdde). `tests/akj_tests.pine` importiert die Library und prüft sie mit
   erfundenen Werten (Tabelle im Chart); Benutzername/Version in der Importzeile vom Nutzer einzutragen. Reihenfolge
   (vom Nutzer vorgegeben): 1. Library erstellen/veröffentlichen, 2. Tests dagegen schreiben, 3. erst bei guter
-  Abdeckung die Kopien aus Indikator und Strategie entfernen und importieren. Bis dahin enthalten Indikator und
-  Strategie die Logik weiter selbst (bei Regeländerungen alle drei synchron halten!). Nächste Library-Kandidaten:
+  Abdeckung die Kopien aus Indikator und Strategie entfernen und importieren – seit v5 umgesetzt: beide Skripte
+  importieren die Library; Regeländerungen gehören in die Library (neue Version, Importzeile in Indikator, Strategie
+  und Tests hochsetzen). Library-Inhalt:
   Setup-Zustandsautomat, FVG-Funktionen (seit v4), bbTrendState/maCalc auf Serien (v5; Tests mit synthetischer
   Serie aus bar_index). Damit ist die gesamte Logik in der Library – nächster Schritt: Indikator und Strategie
-  umschalten (vorher/nachher Regressionstest mit tests/compare_reference.py).
+  umschalten – erledigt auf feature/library (Regressionstest mit tests/compare_reference.py vorher/nachher).
 - Regressionstest (`tests/compare_reference.py`): TradingView-Exporte in `tests/reference/` (Daily, Defaults, ADJ
   aus) sind die Referenz; neue Exporte nach `tests/current/` (gitignored), `--all` vergleicht die Indikator-Plots
   Kerze für Kerze (Liste COLUMNS im Skript; „Tage bis Earnings“ bewusst nicht). Der Export enthält auch die
@@ -88,7 +89,7 @@ und meldet Fehler zurück.
   Im Screener ist earnings.future_time leer (getestet) → Earnings-Sperre greift dort nicht. Nutzer will KEINE
   Schätzung des Termins; Einschränkung ist im README dokumentiert, Treffer werden im Chart geprüft.
 
-- `akj_strategy.pine` – Backtest-Strategie (nur Daily), Setup-Logik KOPIERT aus dem Indikator (synchron halten!).
+- `akj_strategy.pine` – Backtest-Strategie (nur Daily), Setup-Logik aus der Library (akj.setupStep) wie im Indikator.
   Positionsgröße: Max. Drawdown (2000 $) × Risiko/Trade (1 %) / |Entry − SL|, ganze Stück.
   Ausstieg: „CRV 1:1 (komplett)“ oder „Trailing BB-Mittelband“ (ab 1:1 SL auf BE, dann BB-Mid);
   Default Trailing nur Long, Short immer 1:1. Kein 50-%-Teilverkauf (Nutzer-Vorgabe). Kommission 1 $/Order,
@@ -192,6 +193,5 @@ und meldet Fehler zurück.
   Folge: Nach den Earnings erscheinen beim Neuladen Setups aus dem ehemaligen Fenster. Vom Nutzer als
   akzeptabel/hilfreich bewertet (live war die Sperre aktiv); im README dokumentiert.
 - `strategy()`-Version für Backtests (`akj_strategy.pine`, in `main`), Positionsgröße aus Risiko-Regeln.
-  Entscheidung: Setup-Logik zunächst aus dem Indikator KOPIEREN (eigene Datei). Später evtl. Library
-  (privat veröffentlicht), dann zuerst nur für die Strategie; Indikator behält vorerst den vollen Code.
-  Bei Regeländerungen bis dahin Indikator und Strategie synchron halten!
+  Setup-Logik seit Nov. 2026 aus der Library (siehe „Library + Tests“ oben); FVG-Filter in der Strategie weiterhin
+  nicht aktiv (Kandidat).

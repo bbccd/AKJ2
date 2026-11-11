@@ -221,8 +221,9 @@ Tests laufen als eigenes Skript im Chart, weil Pine nicht lokal ausführbar ist:
 3. Ergebnis: grüne Tabelle „Alle N Tests bestanden“ oder rote Tabelle mit den fehlgeschlagenen Fällen; Fehlschläge
    stehen zusätzlich in den Pine Logs.
 
-Stand: Indikator und Strategie enthalten die Logik noch selbst. Erst wenn die Testabdeckung der Library ausreicht,
-binden sie die Library ein und die eigenen Kopien entfallen.
+Indikator und Strategie importieren die Library (`import bBccdde/AKJ2/<Version> as akj`) und enthalten selbst nur
+noch Inputs, Abrufe höherer Zeiteinheiten und Darstellung. Nach einer Library-Änderung: neue Version veröffentlichen
+und die Importzeile in allen drei Skripten (Indikator, Strategie, Tests) hochsetzen.
 
 **Regressionstest gegen Chart-Exporte** (`tests/compare_reference.py`): Für Referenz-Symbole liegt je ein
 TradingView-Export (Chart-Menü → „Chart-Daten exportieren“, ISO-Zeit, Daily, Defaults, ADJ aus) in

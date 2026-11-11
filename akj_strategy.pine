@@ -2,7 +2,8 @@
 strategy("AKJ2.0 – Strategie (Backtest)", shorttitle = "AKJ2.0 S", overlay = true, initial_capital = 10000, currency = currency.USD, pyramiding = 0, default_qty_type = strategy.fixed, default_qty_value = 1, commission_type = strategy.commission.cash_per_order, commission_value = 1, slippage = 2, margin_long = 100, margin_short = 100, use_bar_magnifier = true, process_orders_on_close = false)
 
 // Backtest-Version des Indikators akj_setup_indikator.pine (nur Daily-Chart).
-// Setup-Logik ist aus dem Indikator KOPIERT – bei Regeländerungen beide Dateien synchron halten!
+// Setup-Logik kommt aus der Library akj_lib.pine (wie im Indikator) – Regeländerungen dort, Tests in tests/akj_tests.pine.
+import bBccdde/AKJ2/5 as akj
 // Kommission (Default 1 $/Order) und Slippage (Default 2 Ticks) im Reiter „Eigenschaften“ einstellbar.
 // Einschränkung: Die Earnings-Sperre wirkt nur für den nächsten Termin – im Backtest greift sie für
 // vergangene Earnings NICHT (TradingView liefert vergangene Termine nicht im Voraus).
@@ -46,39 +47,6 @@ startDate = input.time(timestamp("2020-01-01"), "Startdatum", group = G_RANGE)
 endDate   = input.time(timestamp("2099-12-31"), "Enddatum", group = G_RANGE)
 
 // ═══════════════════════════════════════════════════════════════════
-// FUNKTIONEN (aus dem Indikator kopiert)
-// ═══════════════════════════════════════════════════════════════════
-// Latched Trend: 1 = Kauf (2x Close > oberes BB), -1 = Verkauf (2x Close < unteres BB).
-bbTrendState(simple int len, simple float mult) =>
-    [mid, up, lo] = ta.bb(close, len, mult)
-    var int state = 0
-    if close > up and close[1] > up[1]
-        state := 1
-    else if close < lo and close[1] < lo[1]
-        state := -1
-    state
-
-// Puffer in Preiseinheiten (Issue #24): bis zur Schwelle fest X Ticks, darüber Y ‰ vom Kurs, auf den Tick aufgerundet.
-priceBuffer(float price) =>
-    raw = price > bufThresh ? price * bufPermille / 1000.0 : bufTicks * syminfo.mintick
-    math.ceil(raw / syminfo.mintick - 1e-6) * syminfo.mintick
-
-// Entry- bzw. SL-Level: Bezugskurs ± Puffer. dir = 1: Level über dem Kurs (Long-Entry, Short-SL),
-// dir = -1: darunter (Long-SL, Short-Entry). Glatte Zahlen meiden: Liegt die nächste Rasterstufe in Richtung dir
-// näher als Level + ein weiterer Puffer, wird das Level einen Puffer jenseits dieser Stufe gelegt.
-bufLevel(float price, int dir) =>
-    buf = priceBuffer(price)
-    lvl = price + dir * buf
-    if roundAvoid and roundStep > 0
-        r = (dir == 1 ? math.ceil(price / roundStep - 1e-6) : math.floor(price / roundStep + 1e-6)) * roundStep
-        if dir * (lvl + dir * buf - r) > 0
-            lvl := r + dir * buf
-    math.round_to_mintick(lvl)
-
-setupExpired(int startBar, int barIdx) =>
-    expiryBars > 0 and barIdx - startBar >= expiryBars
-
-// ═══════════════════════════════════════════════════════════════════
 // TREND (nur Daily-Chart: Weekly + Daily)
 // ═══════════════════════════════════════════════════════════════════
 isDaily = timeframe.isdaily and timeframe.multiplier == 1
@@ -90,12 +58,12 @@ wr = ta.wpr(wrLen)
 // Weekly: EIN Abruf liefert den Zustand der letzten abgeschlossenen Woche ([1] + lookahead, kein Repainting)
 // und den Zustand inkl. laufender Woche (wie htfData() im Indikator, Issue #21).
 wData() =>
-    s = bbTrendState(bbLen, bbMult)
+    s = akj.bbTrendState(close, bbLen, bbMult)
     [s[1], s]
 [weeklyState, wStateNow] = request.security(syminfo.tickerid, "W", wData(), lookahead = barmerge.lookahead_on)
 
 // Regime auf dieser Kerze: gilt ab der Kerze nach der Trigger-Kerze (wie im Indikator).
-dailyNext   = bbTrendState(bbLen, bbMult)   // Zustand nach dem heutigen Close
+dailyNext   = akj.bbTrendState(close, bbLen, bbMult)   // Zustand nach dem heutigen Close
 dailyState  = dailyNext[1]
 longTrend   = isDaily and weeklyState == 1  and dailyState == 1
 shortTrend  = isDaily and weeklyState == -1 and dailyState == -1
@@ -113,57 +81,29 @@ DAY_MS        = 86400000
 earnWinMs     = earnDays * DAY_MS
 nextEarn      = earnings.future_time
 // Vergleich nach Kalendertagen wie im Indikator (Issue #1: Zahlen vor Börsenbeginn).
-dayOf(int t) =>
-    timestamp("UTC", year(t, syminfo.timezone), month(t, syminfo.timezone), dayofmonth(t, syminfo.timezone), 0, 0)
-earnDay       = na(nextEarn) ? int(na) : int(nextEarn) - int(nextEarn) % DAY_MS
-inEarnWin(int firstDay, int lastDay) =>
-    not na(earnDay) and lastDay >= earnDay - earnWinMs and firstDay <= earnDay
-barDay        = dayOf(time)
+earnDay       = akj.earnDay(int(nextEarn))
+barDay        = akj.dayOf(time, syminfo.timezone)
 nextDayShift  = (dayofweek == dayofweek.friday ? 3 : 1) * DAY_MS
-earnBlock     = hideNearEarn and inEarnWin(barDay, barDay)
-earnBlockNext = hideNearEarn and inEarnWin(barDay + nextDayShift, barDay + nextDayShift)
+earnBlock     = hideNearEarn and akj.inEarnWin(barDay, barDay, earnDay, earnWinMs)
+earnBlockNext = hideNearEarn and akj.inEarnWin(barDay + nextDayShift, barDay + nextDayShift, earnDay, earnWinMs)
 
 // ═══════════════════════════════════════════════════════════════════
-// SETUP-LOGIK (aus dem Indikator kopiert; während eines offenen Trades keine Setups)
+// SETUP-LOGIK (Library akj.setupStep wie im Indikator; während eines offenen Trades keine Setups)
+// Unterschied zum alten Inline-Code: Ein Setup entsteht bzw. bleibt nicht mehr auf einer Kerze, deren Close der
+// Gegentrigger ist (longNext/shortNext). Auf die Orders hat das keinen Einfluss – dafür galt schon vorher trendNext.
 // ═══════════════════════════════════════════════════════════════════
-var int   setupDir   = 0
-var int   setupStart = na
-var float entryLvl   = na
-var float slLvl      = na
-
+rules = akj.Rules.new(enableLong, enableShort, wrLongLvl, wrShortLvl, expiryBars, syminfo.mintick, bufTicks, bufThresh, bufPermille, roundAvoid, roundStep)
+var akj.Setup st = akj.Setup.new()
 posDir = strategy.position_size > 0 ? 1 : strategy.position_size < 0 ? -1 : 0
 if posDir != 0
-    setupDir := 0
+    st := akj.Setup.new()
+st := akj.setupStep(st, rules, open, high, low, close, wr, bar_index, barstate.isconfirmed, posDir == 0 and isDaily and inRange, longTrend, shortTrend, longNext, shortNext, earnBlock)
+setupDir   = st.dir
+setupStart = st.startBar
+entryLvl   = st.entry
+slLvl      = st.sl
 
-int evTrigDir = 0
-if setupDir != 0
-    trendLost = setupDir == 1 ? not longTrend : not shortTrend
-    if trendLost or earnBlock or setupExpired(setupStart, bar_index)
-        setupDir := 0
-    else if setupDir == 1 ? high >= entryLvl : low <= entryLvl
-        evTrigDir := setupDir
-        setupDir  := 0
-
-longSig  = posDir == 0 and isDaily and inRange and enableLong  and longTrend  and close < open and wr <= wrLongLvl  and not earnBlock
-shortSig = posDir == 0 and isDaily and inRange and enableShort and shortTrend and close > open and wr >= wrShortLvl and not earnBlock
-moveSig  = setupDir == 1 ? close < open : setupDir == -1 ? close > open : false
-
-if barstate.isconfirmed and evTrigDir == 0 and posDir == 0
-    newDir = setupDir != 0 ? (moveSig ? setupDir : 0) : longSig ? 1 : shortSig ? -1 : 0
-    if newDir != 0
-        barSl = newDir == 1 ? bufLevel(low, -1) : bufLevel(high, 1)
-        if setupDir == 0
-            setupStart := bar_index
-            slLvl      := barSl
-        else
-            slLvl      := newDir == 1 ? math.min(slLvl, barSl) : math.max(slLvl, barSl)
-        setupDir := newDir
-        entryLvl := newDir == 1 ? bufLevel(high, 1) : bufLevel(low, -1)
-    else if setupDir != 0
-        barSl = setupDir == 1 ? bufLevel(low, -1) : bufLevel(high, 1)
-        slLvl := setupDir == 1 ? math.min(slLvl, barSl) : math.max(slLvl, barSl)
-
-riskPct = setupDir != 0 ? math.abs(entryLvl - slLvl) / entryLvl * 100 : na
+riskPct = setupDir != 0 ? akj.riskPct(entryLvl, slLvl) : na
 riskOk  = not riskFilter or (riskPct >= riskMin and riskPct <= riskMax)
 
 // ═══════════════════════════════════════════════════════════════════
@@ -182,7 +122,7 @@ var bool  trTp1Hit = false
 // 1) Flat: Stop-Order für das offene Setup setzen/nachziehen oder löschen.
 if posDir == 0
     trTp1Hit := false
-    expiryNext = setupDir != 0 and setupExpired(setupStart, bar_index + 1)
+    expiryNext = setupDir != 0 and akj.setupExpired(bar_index + 1, setupStart, expiryBars)
     trendNext  = setupDir == 1 ? longNext : setupDir == -1 ? shortNext : false
     qty        = setupDir != 0 ? math.floor(riskAmt / math.abs(entryLvl - slLvl)) : 0
     orderOk    = setupDir != 0 and riskOk and trendNext and not earnBlockNext and not expiryNext and qty >= 1
