@@ -4,7 +4,7 @@
 // bestanden / fehlgeschlagen als Tabelle in der Chart-Mitte; Fehlschläge stehen zusätzlich in den Pine Logs.
 // Importzeile: <Benutzername> = TradingView-Benutzername des Veröffentlichers, Zahl = Version der Library.
 indicator("AKJ2.0 – Tests", shorttitle = "AKJ2.0 Tests", overlay = false)
-import bBccdde/AKJ2/3 as akj
+import bBccdde/AKJ2/4 as akj
 
 // ═══════════════════════════════════════════════════════════════════
 // MINI-TESTRAHMEN
@@ -36,6 +36,14 @@ checkS(string name, string got, string want) =>
 // Standard-Puffer wie die Inputs des Indikators: Tick 0,01, 3 Ticks bis Kurs 100, darüber 0,3 ‰, Raster 0,50.
 bufStd(float price, int dir) =>
     akj.bufLevel(price, dir, 0.01, 3, 100.0, 0.3, true, 0.5)
+
+// Standard-Regeln (Defaults des Indikators) und zwei Kerzen-Helfer für den Zustandsautomaten:
+// abgeschlossene Kerze, Setups erlaubt, keine Sperre; Long- bzw. Short-Trigger aktiv und nach dem Close weiter aktiv.
+R = akj.Rules.new()
+stepL(akj.Setup s, float o, float h, float l, float c, float wr, int bi) =>
+    akj.setupStep(s, R, o, h, l, c, wr, bi, true, true, true, false, true, false, false)
+stepS(akj.Setup s, float o, float h, float l, float c, float wr, int bi) =>
+    akj.setupStep(s, R, o, h, l, c, wr, bi, true, true, false, true, false, true, false)
 
 // ═══════════════════════════════════════════════════════════════════
 // TESTFÄLLE (nur einmal, auf der jüngsten Kerze)
@@ -226,6 +234,110 @@ if barstate.islast
     checkS("Sektor-ETF: Retail Trade sonst → XLY",                    akj.sectorEtf("Retail Trade", "Specialty Stores"), "XLY")
     checkS("Sektor-ETF: ETF/Fonds → –",                               akj.sectorEtf("Miscellaneous", "Investment Trusts/Mutual Funds"), "–")
     checkS("Sektor-ETF: leer → –",                                    akj.sectorEtf("", ""), "–")
+
+    // ── Setup-Zustandsautomat: Long, Kerzenfolge ──
+    s0 = akj.Setup.new()
+    checkI("Setup: Anfangszustand kein Setup",                         s0.dir, 0)
+    s1 = stepL(s0, 100.0, 101.0, 99.0, 99.5, -85.0, 10)              // Signalkerze: rot, %R −85
+    checkB("Setup: Signalkerze → neues Setup",                         s1.isNew, true)
+    checkI("Setup: Richtung Long",                                     s1.dir, 1)
+    checkI("Setup: Startkerze 10",                                     s1.startBar, 10)
+    checkF("Setup: Entry = Hoch 101 + Puffer (0,3 ‰ → 0,04) → 101,04",  s1.entry, 101.04)
+    checkF("Setup: SL = Tief 99 − Puffer → 98,97",                     s1.sl, 98.97)
+    checkI("Setup: Entry nicht erreicht",                              s1.trigDir, 0)
+    checkI("Setup: Eingabe bleibt unverändert (Kopie)",                s0.dir, 0)
+    s2 = stepL(s1, 99.6, 100.8, 99.2, 100.2, -50.0, 11)              // grün, kein neues Tief
+    checkB("Setup: grüne Kerze → kein neues Setup",                    s2.isNew, false)
+    checkB("Setup: grüne Kerze → nicht nachgezogen",                   s2.moved, false)
+    checkI("Setup: bleibt offen",                                      s2.dir, 1)
+    checkF("Setup: Entry bleibt 101,04",                               s2.entry, 101.04)
+    checkF("Setup: SL bleibt 98,97 (kein neues Tief)",                 s2.sl, 98.97)
+    s3 = stepL(s2, 100.0, 100.5, 98.5, 100.3, -50.0, 12)             // grün, neues Tief 98,5
+    checkF("Setup: neues Tief zieht SL nach → 98,47",                  s3.sl, 98.47)
+    checkF("Setup: Entry bleibt bei grüner Kerze",                     s3.entry, 101.04)
+    checkB("Setup: SL-Nachziehen ist kein Nachzieh-Ereignis",          s3.moved, false)
+    s4 = stepL(s3, 100.2, 100.6, 99.0, 99.4, -40.0, 13)              // Downday, %R egal
+    checkB("Setup: Downday → nachgezogen",                             s4.moved, true)
+    checkB("Setup: Nachziehen ist kein neues Setup",                   s4.isNew, false)
+    checkF("Setup: Entry nachgezogen auf Hoch 100,6 + Puffer → 100,64", s4.entry, 100.64)
+    checkF("Setup: SL wandert nie zurück → 98,47",                     s4.sl, 98.47)
+    checkI("Setup: Startkerze bleibt 10",                              s4.startBar, 10)
+    s5 = stepL(s4, 99.5, 100.5, 99.3, 100.4, -30.0, 14)              // Hoch unter dem Entry
+    checkI("Setup: Hoch 100,5 < Entry 100,64 → bleibt offen",          s5.dir, 1)
+    checkI("Setup: kein Entry-Ereignis",                               s5.trigDir, 0)
+    s6 = stepL(s5, 100.4, 100.7, 100.0, 100.5, -20.0, 15)            // Hoch ≥ Entry
+    checkI("Setup: Hoch ≥ Entry → Entry erreicht (Long)",              s6.trigDir, 1)
+    checkI("Setup: danach kein Setup",                                 s6.dir, 0)
+    checkF("Setup: Entry bleibt für die Darstellung stehen",           s6.entry, 100.64)
+    checkF("Setup: SL bleibt für die Darstellung stehen",              s6.sl, 98.47)
+    s6b = stepL(s5, 100.8, 100.9, 99.0, 99.2, -85.0, 15)             // Entry-Kerze, zugleich rot mit %R −85
+    checkI("Setup: Entry-Kerze → Entry erreicht",                      s6b.trigDir, 1)
+    checkB("Setup: Entry-Kerze erzeugt kein neues Setup",              s6b.isNew, false)
+    s7 = stepL(s6, 100.5, 100.9, 99.8, 100.0, -85.0, 16)             // Folgekerze: rot, %R −85
+    checkB("Setup: nach dem Entry wieder neues Setup möglich",         s7.isNew, true)
+    checkI("Setup: neue Startkerze 16",                                s7.startBar, 16)
+    checkF("Setup: neuer Entry 100,94",                                s7.entry, 100.94)
+    checkF("Setup: neuer SL 99,77",                                    s7.sl, 99.77)
+
+    // ── Setup: Signalbedingungen ──
+    checkB("Signal: grüne Kerze mit %R −85 → kein Long",               stepL(s0, 100.0, 101.0, 99.0, 100.5, -85.0, 20).isNew, false)
+    checkB("Signal: rote Kerze mit %R −79 → kein Long",                stepL(s0, 100.0, 101.0, 99.0, 99.5, -79.0, 20).isNew, false)
+    checkB("Signal: %R genau −80 zählt (≤)",                           stepL(s0, 100.0, 101.0, 99.0, 99.5, -80.0, 20).isNew, true)
+    checkB("Signal: Doji (Close = Open) → kein Long",                  stepL(s0, 100.0, 101.0, 99.0, 100.0, -85.0, 20).isNew, false)
+    checkB("Signal: Trigger aus → kein Setup",                         akj.setupStep(s0, R, 100.0, 101.0, 99.0, 99.5, -85.0, 20, true, true, false, false, false, false, false).isNew, false)
+    checkB("Signal: Close ist Gegentrigger (longNext aus) → kein Setup", akj.setupStep(s0, R, 100.0, 101.0, 99.0, 99.5, -85.0, 20, true, true, true, false, false, false, false).isNew, false)
+    checkB("Signal: Short-Trigger bei roter Kerze → kein Setup",       stepS(s0, 100.0, 101.0, 99.0, 99.5, -85.0, 20).dir == 0, true)
+    checkB("Signal: Earnings-Sperre → kein Setup",                     akj.setupStep(s0, R, 100.0, 101.0, 99.0, 99.5, -85.0, 20, true, true, true, false, true, false, true).isNew, false)
+    checkB("Signal: nicht erlaubt (Chart/Zeitraum) → kein Setup",      akj.setupStep(s0, R, 100.0, 101.0, 99.0, 99.5, -85.0, 20, true, false, true, false, true, false, false).isNew, false)
+    checkB("Signal: laufende Kerze → kein Setup",                      akj.setupStep(s0, R, 100.0, 101.0, 99.0, 99.5, -85.0, 20, false, true, true, false, true, false, false).isNew, false)
+    Rn = akj.Rules.new(allowLong = false)
+    checkB("Signal: Long-Setups abgeschaltet → kein Setup",            akj.setupStep(s0, Rn, 100.0, 101.0, 99.0, 99.5, -85.0, 20, true, true, true, false, true, false, false).isNew, false)
+
+    // ── Setup: Abbruch (jeweils ab dem offenen Setup s1) ──
+    sA = akj.setupStep(s1, R, 99.4, 100.0, 98.8, 99.0, -60.0, 11, true, true, false, false, false, false, false)
+    checkI("Abbruch: Trigger weg → kein Setup",                        sA.dir, 0)
+    checkI("Abbruch: Trigger weg ist kein Entry-Ereignis",             sA.trigDir, 0)
+    sB = akj.setupStep(s1, R, 99.4, 100.0, 98.8, 99.0, -60.0, 11, true, true, true, false, true, false, true)
+    checkI("Abbruch: Earnings-Sperre → kein Setup",                    sB.dir, 0)
+    sC = akj.setupStep(s1, R, 99.4, 100.0, 98.8, 99.0, -60.0, 11, true, true, true, false, false, false, false)
+    checkI("Abbruch: Close ist Gegentrigger → endet sofort",           sC.dir, 0)
+    sC2 = akj.setupStep(s1, R, 99.4, 100.0, 98.8, 99.0, -85.0, 11, true, true, true, false, false, false, false)
+    checkB("Abbruch: Gegentrigger-Kerze erzeugt kein neues Setup",     sC2.isNew, false)
+    Re = akj.Rules.new(expiryBars = 2)
+    sE1 = akj.setupStep(s1, Re, 99.6, 100.5, 99.2, 100.2, -50.0, 11, true, true, true, false, true, false, false)
+    checkI("Verfall: 1 Kerze nach Start, Grenze 2 → offen",            sE1.dir, 1)
+    sE2 = akj.setupStep(sE1, Re, 99.6, 100.5, 99.2, 100.2, -50.0, 12, true, true, true, false, true, false, false)
+    checkI("Verfall: 2 Kerzen nach Start, Grenze 2 → verfallen",       sE2.dir, 0)
+    sD = akj.setupStep(s1, R, 100.5, 101.5, 100.0, 101.2, -10.0, 11, true, true, false, false, false, false, false)
+    checkI("Abbruch: Trigger weg geht vor Entry (Order wäre gelöscht)", sD.trigDir, 0)
+    sI = akj.setupStep(s1, R, 100.5, 101.5, 100.0, 101.2, -10.0, 11, false, true, true, false, true, false, false)
+    checkI("Intrabar: Hoch ≥ Entry → Entry auch auf laufender Kerze erreicht", sI.trigDir, 1)
+
+    // ── Setup-Zustandsautomat: Short (spiegelbildlich) ──
+    t1 = stepS(s0, 100.0, 101.0, 99.5, 100.8, -15.0, 30)             // Signalkerze: grün, %R −15
+    checkB("Short: grüne Kerze, %R −15 → neues Setup",                 t1.isNew, true)
+    checkI("Short: Richtung −1",                                       t1.dir, -1)
+    checkF("Short: Entry = Tief 99,5 − Puffer → 99,47",                t1.entry, 99.47)
+    checkF("Short: SL = Hoch 101 + Puffer (0,3 ‰ → 0,04) → 101,04",     t1.sl, 101.04)
+    checkB("Short: %R −21 → kein Setup",                               stepS(s0, 100.0, 101.0, 99.5, 100.8, -21.0, 30).isNew, false)
+    checkB("Short: %R genau −20 zählt (≥)",                            stepS(s0, 100.0, 101.0, 99.5, 100.8, -20.0, 30).isNew, true)
+    t2 = stepS(t1, 100.5, 101.5, 100.0, 101.2, -10.0, 31)            // Upday → nachziehen
+    checkB("Short: Upday → nachgezogen",                               t2.moved, true)
+    checkF("Short: Entry nachgezogen auf Tief 100 − Puffer → 99,97",   t2.entry, 99.97)
+    checkF("Short: SL folgt neuem Hoch → 101,54",                      t2.sl, 101.54)
+    t3 = stepS(t2, 101.0, 101.2, 100.5, 100.6, -40.0, 32)            // rot: Entry bleibt, kein neues Hoch
+    checkB("Short: rote Kerze → nicht nachgezogen",                    t3.moved, false)
+    checkF("Short: Entry bleibt 99,97",                                t3.entry, 99.97)
+    checkF("Short: SL bleibt 101,54",                                  t3.sl, 101.54)
+    t4 = stepS(t3, 100.5, 100.8, 99.9, 100.1, -50.0, 33)             // Tief ≤ Entry
+    checkI("Short: Tief ≤ Entry → Entry erreicht (Short)",             t4.trigDir, -1)
+    checkI("Short: danach kein Setup",                                 t4.dir, 0)
+
+    // ── Risiko und Level nach Regeln ──
+    checkF("Risiko: Entry 100, SL 95 → 5 %",                           akj.riskPct(100.0, 95.0), 5.0)
+    checkF("Risiko: Short Entry 100, SL 105 → 5 %",                    akj.riskPct(100.0, 105.0), 5.0)
+    checkF("Risiko: Entry 200, SL 196 → 2 %",                          akj.riskPct(200.0, 196.0), 2.0)
+    checkF("Level nach Regeln entspricht bufLevel (49,95 → 50,03)",    akj.setupLevel(R, 49.95, 1), 50.03)
 
 // ═══════════════════════════════════════════════════════════════════
 // ERGEBNIS: Tabelle in der Chart-Mitte, Fehlschläge zusätzlich in den Pine Logs

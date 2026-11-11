@@ -272,3 +272,131 @@ export sectorEtf(string sec, string ind) =>
             "Transportation"         => "XLI"
             => "–"
     etf
+
+// ═══════════════════════════════════════════════════════════════════
+// SETUP-ZUSTANDSAUTOMAT
+// Zeigt nur, ob ein Setup besteht und wo Entry (Stop-Order) und SL lägen. Wird der Entry erreicht, endet das
+// Setup – kein Trade-Management. Die Funktion setupStep() verändert den übergebenen Zustand NICHT, sondern gibt
+// eine Kopie zurück: `st := akj.setupStep(st, …)`. So greift das Rollback von TradingView auf laufenden Kerzen.
+// ═══════════════════════════════════════════════════════════════════
+
+// @type Regeln für Setups (Inputs des Indikators) inkl. Puffer-Parameter.
+// @field allowLong   Long-Setups erlaubt.
+// @field allowShort  Short-Setups erlaubt.
+// @field wrLong      Long-Signal: Williams %R Close ≤ dieser Wert.
+// @field wrShort     Short-Signal: Williams %R Close ≥ dieser Wert.
+// @field expiryBars  Setup verfällt nach so vielen Kerzen ab der ersten Signalkerze; 0 = nie.
+// @field tick        Tick-Größe des Symbols (syminfo.mintick).
+// @field bufTicks    Puffer in Ticks bis zur Kurs-Schwelle.
+// @field bufThresh   Kurs-Schwelle; darüber gilt der Promille-Puffer.
+// @field bufPermille Puffer in ‰ vom Kurs oberhalb der Schwelle.
+// @field roundAvoid  Glatte Zahlen meiden an/aus.
+// @field roundStep   Raster für glatte Zahlen.
+export type Rules
+    bool  allowLong   = true
+    bool  allowShort  = true
+    float wrLong      = -80.0
+    float wrShort     = -20.0
+    int   expiryBars  = 0
+    float tick        = 0.01
+    int   bufTicks    = 3
+    float bufThresh   = 100.0
+    float bufPermille = 0.3
+    bool  roundAvoid  = true
+    float roundStep   = 0.5
+
+// @type Zustand des Setups plus die Ereignisse der aktuellen Kerze.
+// @field dir      0 = kein Setup, 1 = Long, -1 = Short.
+// @field startBar Kerzennummer der ersten Signalkerze.
+// @field entry    Entry-Level (Stop-Order); bleibt nach dem Ende des Setups stehen (für die Darstellung).
+// @field sl       Stop-Loss-Level; bleibt nach dem Ende des Setups stehen.
+// @field isNew    Ereignis: Auf dieser Kerze ist ein neues Setup entstanden.
+// @field moved    Ereignis: Auf dieser Kerze wurde der Entry nachgezogen.
+// @field trigDir  Ereignis: Entry auf dieser Kerze erreicht (1 Long, -1 Short), sonst 0.
+export type Setup
+    int   dir      = 0
+    int   startBar
+    float entry
+    float sl
+    bool  isNew    = false
+    bool  moved    = false
+    int   trigDir  = 0
+
+// @function Entry- bzw. SL-Level nach den Regeln (bufLevel mit den Puffer-Parametern aus `r`).
+// @param r     Regeln.
+// @param price Bezugskurs (Hoch bzw. Tief).
+// @param dir   1 = über dem Kurs, -1 = darunter.
+// @returns Level, auf den Tick gerundet.
+export setupLevel(Rules r, float price, int dir) =>
+    bufLevel(price, dir, r.tick, r.bufTicks, r.bufThresh, r.bufPermille, r.roundAvoid, r.roundStep)
+
+// @function Ein Kerzenschritt des Setup-Zustandsautomaten.
+//           1) Offenes Setup: Zuerst Abbruch prüfen – Trigger weg, Sperre, Verfall stehen schon zur Eröffnung
+//              fest. Danach: Entry erreicht (Hoch ≥ Entry bei Long, Tief ≤ Entry bei Short)? Gaps ohne
+//              Berührung zählen nicht. Ist der Close dieser Kerze selbst der Gegentrigger, endet das Setup sofort.
+//           2) Neues Setup (nur abgeschlossene Kerzen): Trigger aktiv, rote (Long) / grüne (Short) Kerze, %R im
+//              Extrembereich. Nachziehen: Solange das Setup offen ist, zieht jeder weitere Downday (Long) bzw.
+//              Upday (Short) den Entry nach – ohne erneute %R-Prüfung. SL: immer unter dem tiefsten Tief (Long)
+//              bzw. über dem höchsten Hoch (Short) seit der ersten Signalkerze; auch Kerzen ohne Signal ziehen ihn
+//              nach, er wandert nie zurück.
+// @param s          Bisheriger Zustand (wird nicht verändert).
+// @param r          Regeln.
+// @param o          Open der Kerze.
+// @param h          Hoch der Kerze.
+// @param l          Tief der Kerze.
+// @param c          Close der Kerze.
+// @param wr         Williams %R der Kerze.
+// @param barIndex   Kerzennummer.
+// @param confirmed  Kerze abgeschlossen (barstate.isconfirmed).
+// @param enabled    Setups in diesem Chart/Zeitraum überhaupt erlaubt (Trade-Chart, Zeitraum).
+// @param longTrend  Trigger Long aktiv (übergeordneter TF und Trade-TF Kauf).
+// @param shortTrend Trigger Short aktiv.
+// @param longNext   Trigger Long auch nach dem Close dieser Kerze.
+// @param shortNext  Trigger Short auch nach dem Close dieser Kerze.
+// @param blocked    Sperre (z. B. Earnings-Sperrfenster): keine neuen Setups, offenes Setup endet.
+// @returns Neuer Zustand (Kopie) inkl. der Ereignisse dieser Kerze.
+export setupStep(Setup s, Rules r, float o, float h, float l, float c, float wr, int barIndex, bool confirmed, bool enabled, bool longTrend, bool shortTrend, bool longNext, bool shortNext, bool blocked) =>
+    n = s.copy()
+    n.isNew   := false
+    n.moved   := false
+    n.trigDir := 0
+    // 1) Offenes Setup: Abbruch oder Entry erreicht?
+    if n.dir != 0
+        trendLost = n.dir == 1 ? not longTrend : not shortTrend
+        if trendLost or blocked or setupExpired(barIndex, n.startBar, r.expiryBars)
+            n.dir := 0
+        else if n.dir == 1 ? h >= n.entry : l <= n.entry
+            n.trigDir := n.dir
+            n.dir     := 0
+    // Close dieser Kerze ist der Gegentrigger: Setup endet sofort, nicht erst auf der Folgekerze.
+    if confirmed and n.dir != 0 and not (n.dir == 1 ? longNext : shortNext)
+        n.dir := 0
+    // 2) Neues Setup oder Nachziehen
+    longSig  = enabled and r.allowLong  and longTrend  and longNext  and c < o and wr <= r.wrLong  and not blocked
+    shortSig = enabled and r.allowShort and shortTrend and shortNext and c > o and wr >= r.wrShort and not blocked
+    moveSig  = n.dir == 1 ? c < o : n.dir == -1 ? c > o : false
+    if confirmed and n.trigDir == 0
+        newDir = n.dir != 0 ? (moveSig ? n.dir : 0) : longSig ? 1 : shortSig ? -1 : 0
+        if newDir != 0
+            barSl = newDir == 1 ? setupLevel(r, l, -1) : setupLevel(r, h, 1)
+            if n.dir == 0
+                n.isNew    := true
+                n.startBar := barIndex
+                n.sl       := barSl
+            else
+                n.moved := true
+                n.sl    := newDir == 1 ? math.min(n.sl, barSl) : math.max(n.sl, barSl)
+            n.dir   := newDir
+            n.entry := newDir == 1 ? setupLevel(r, h, 1) : setupLevel(r, l, -1)
+        else if n.dir != 0
+            // Kerze ohne Signal (Long: grün, Short: rot): Entry bleibt, SL folgt einem neuen Extrem der Bewegung.
+            barSl = n.dir == 1 ? setupLevel(r, l, -1) : setupLevel(r, h, 1)
+            n.sl := n.dir == 1 ? math.min(n.sl, barSl) : math.max(n.sl, barSl)
+    n
+
+// @function Prozentuales Risiko eines Setups: |Entry − SL| / Entry × 100.
+// @param entry Entry-Level.
+// @param sl    Stop-Loss-Level.
+// @returns Risiko in Prozent.
+export riskPct(float entry, float sl) =>
+    math.abs(entry - sl) / entry * 100
