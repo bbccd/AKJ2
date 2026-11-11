@@ -4,7 +4,7 @@
 // bestanden / fehlgeschlagen als Tabelle in der Chart-Mitte; Fehlschläge stehen zusätzlich in den Pine Logs.
 // Importzeile: <Benutzername> = TradingView-Benutzername des Veröffentlichers, Zahl = Version der Library.
 indicator("AKJ2.0 – Tests", shorttitle = "AKJ2.0 Tests", overlay = false)
-import bBccdde/AKJ2/4 as akj
+import bBccdde/AKJ2/5 as akj
 
 // ═══════════════════════════════════════════════════════════════════
 // MINI-TESTRAHMEN
@@ -44,6 +44,29 @@ stepL(akj.Setup s, float o, float h, float l, float c, float wr, int bi) =>
     akj.setupStep(s, R, o, h, l, c, wr, bi, true, true, true, false, true, false, false)
 stepS(akj.Setup s, float o, float h, float l, float c, float wr, int bi) =>
     akj.setupStep(s, R, o, h, l, c, wr, bi, true, true, false, true, false, true, false)
+
+// ═══════════════════════════════════════════════════════════════════
+// SYNTHETISCHE KERZENSERIE für die Serienfunktionen (Trend, MAs)
+// Die Werte hängen nur von bar_index ab, nicht vom Chart. Jede Kerze liefert einen Wert, die Ergebnisse der
+// ersten 30 Kerzen werden aufgezeichnet und am Ende geprüft. Verlauf: 12× 100, 2× 110, 12× 100, 2× 90, dann 100.
+// BB 10 / 1 auf flacher Serie: Standardabweichung 0, Bänder = 100.
+// ═══════════════════════════════════════════════════════════════════
+SEQ = array.from(100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0,
+                 110.0, 110.0,
+                 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0,
+                 90.0, 90.0,
+                 100.0, 100.0)
+syn      = bar_index < SEQ.size() ? SEQ.get(bar_index) : 100.0
+synState = akj.bbTrendState(syn, 10, 1.0)
+synSma   = akj.maCalc(syn, 10, "SMA")
+synEma   = akj.maCalc(syn, 10, "EMA")
+var array<int>   recState = array.new<int>()
+var array<float> recSma   = array.new<float>()
+var array<float> recEma   = array.new<float>()
+if bar_index < 30
+    recState.push(synState)
+    recSma.push(synSma)
+    recEma.push(synEma)
 
 // ═══════════════════════════════════════════════════════════════════
 // TESTFÄLLE (nur einmal, auf der jüngsten Kerze)
@@ -338,6 +361,24 @@ if barstate.islast
     checkF("Risiko: Short Entry 100, SL 105 → 5 %",                    akj.riskPct(100.0, 105.0), 5.0)
     checkF("Risiko: Entry 200, SL 196 → 2 %",                          akj.riskPct(200.0, 196.0), 2.0)
     checkF("Level nach Regeln entspricht bufLevel (49,95 → 50,03)",    akj.setupLevel(R, 49.95, 1), 50.03)
+
+    // ── Serienfunktionen auf der synthetischen Serie (Chart braucht mindestens 30 Kerzen) ──
+    checkI("Serie: 30 Kerzen aufgezeichnet",                            recState.size(), 30)
+    if recState.size() == 30
+        // Trend: Kerze 12 = erste 110 (oberes Band 104, Vorkerze nicht drüber) → 0; Kerze 13 = zweite 110 → Kauf.
+        checkI("Serie Trend: flach → kein Zustand (Kerze 11)",            recState.get(11), 0)
+        checkI("Serie Trend: erste Kerze über dem Band → noch 0 (Kerze 12)", recState.get(12), 0)
+        checkI("Serie Trend: zweite Kerze über dem Band → Kauf (Kerze 13)", recState.get(13), 1)
+        checkI("Serie Trend: zurück auf 100 hält Kauf (Kerze 20)",        recState.get(20), 1)
+        checkI("Serie Trend: erste Kerze unter dem Band → Kauf bleibt (Kerze 26)", recState.get(26), 1)
+        checkI("Serie Trend: zweite Kerze unter dem Band → Verkauf (Kerze 27)", recState.get(27), -1)
+        checkI("Serie Trend: 100 ist kein Kauf-Trigger → Verkauf bleibt (Kerze 29)", recState.get(29), -1)
+        // MAs: flach → 100; nach zwei 110ern SMA (8×100 + 2×110) / 10 = 102, EMA 12500 / 121.
+        checkF("Serie SMA: flach → 100 (Kerze 11)",                       recSma.get(11), 100.0)
+        checkF("Serie SMA: nach 2× 110 → 102 (Kerze 13)",                 recSma.get(13), 102.0)
+        checkF("Serie EMA: flach → 100 (Kerze 11)",                       recEma.get(11), 100.0)
+        checkF("Serie EMA: nach 2× 110 → 103,3058 (Kerze 13)",            recEma.get(13), 12500.0 / 121.0)
+        checkB("Serie: EMA ≠ SMA nach dem Sprung",                        math.abs(recEma.get(13) - recSma.get(13)) > 0.5, true)
 
 // ═══════════════════════════════════════════════════════════════════
 // ERGEBNIS: Tabelle in der Chart-Mitte, Fehlschläge zusätzlich in den Pine Logs

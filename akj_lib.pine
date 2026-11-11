@@ -400,3 +400,32 @@ export setupStep(Setup s, Rules r, float o, float h, float l, float c, float wr,
 // @returns Risiko in Prozent.
 export riskPct(float entry, float sl) =>
     math.abs(entry - sl) / entry * 100
+
+// ═══════════════════════════════════════════════════════════════════
+// FUNKTIONEN AUF KERZENSERIEN (Trend, Moving Averages)
+// Brauchen eine Serie als Eingabe (z. B. `close`), laufen also je Kerze – anders als die reinen Funktionen oben.
+// ═══════════════════════════════════════════════════════════════════
+
+// @function Gehaltener Trendzustand auf einer Kerzenserie: 1 = Kauf (2x Close > oberes BB), -1 = Verkauf
+//           (2x Close < unteres BB). Wechselt nur, wenn der Trigger in die Gegenrichtung kommt. Jeder Aufruf
+//           hat seinen eigenen Zustand (auch innerhalb von request.security).
+// @param src  Kursserie (z. B. `close`).
+// @param len  Bollinger-Band-Länge.
+// @param mult Bollinger-Band-Standardabweichung.
+// @returns Zustand nach dem Close der aktuellen Kerze: 1, -1 oder 0 (noch kein Trigger).
+export bbTrendState(series float src, simple int len, simple float mult) =>
+    [mid, up, lo] = ta.bb(src, len, mult)
+    var int state = 0
+    state := trendStep(state, src, src[1], up, up[1], lo, lo[1])
+    state
+
+// @function Moving Average je nach Typ (SMA und EMA werden beide berechnet, damit die ta-Funktionen auf jeder
+//           Kerze laufen).
+// @param src  Kursserie.
+// @param len  Länge.
+// @param kind "EMA" oder sonst SMA.
+// @returns Der gleitende Durchschnitt.
+export maCalc(series float src, simple int len, simple string kind) =>
+    e = ta.ema(src, len)
+    s = ta.sma(src, len)
+    kind == "EMA" ? e : s

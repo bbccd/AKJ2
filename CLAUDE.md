@@ -30,7 +30,9 @@ und meldet Fehler zurück.
   (vom Nutzer vorgegeben): 1. Library erstellen/veröffentlichen, 2. Tests dagegen schreiben, 3. erst bei guter
   Abdeckung die Kopien aus Indikator und Strategie entfernen und importieren. Bis dahin enthalten Indikator und
   Strategie die Logik weiter selbst (bei Regeländerungen alle drei synchron halten!). Nächste Library-Kandidaten:
-  Setup-Zustandsautomat, FVG-Funktionen (beide seit v4 drin; offen: bbTrendState/maCalc auf Serien).
+  Setup-Zustandsautomat, FVG-Funktionen (seit v4), bbTrendState/maCalc auf Serien (v5; Tests mit synthetischer
+  Serie aus bar_index). Damit ist die gesamte Logik in der Library – nächster Schritt: Indikator und Strategie
+  umschalten (vorher/nachher Regressionstest mit tests/compare_reference.py).
 - Regressionstest (`tests/compare_reference.py`): TradingView-Exporte in `tests/reference/` (Daily, Defaults, ADJ
   aus) sind die Referenz; neue Exporte nach `tests/current/` (gitignored), `--all` vergleicht die Indikator-Plots
   Kerze für Kerze (Liste COLUMNS im Skript; „Tage bis Earnings“ bewusst nicht). Der Export enthält auch die
