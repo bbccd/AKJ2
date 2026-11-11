@@ -4,7 +4,7 @@
 // bestanden / fehlgeschlagen als Tabelle in der Chart-Mitte; Fehlschläge stehen zusätzlich in den Pine Logs.
 // Importzeile: <Benutzername> = TradingView-Benutzername des Veröffentlichers, Zahl = Version der Library.
 indicator("AKJ2.0 – Tests", shorttitle = "AKJ2.0 Tests", overlay = false)
-import bBccdde/AKJ2/1 as akj
+import bBccdde/AKJ2/2 as akj
 
 // ═══════════════════════════════════════════════════════════════════
 // MINI-TESTRAHMEN
@@ -58,6 +58,127 @@ if barstate.islast
     checkI("Trend: nur 1x Close unter unterem BB → Kauf bleibt", akj.trendStep(1, 89.0, 91.0, 100.0, 100.0, 90.0, 90.0), 1)
     checkI("Trend: Verkauf hält, solange kein Gegentrigger", akj.trendStep(-1, 95.0, 95.0, 100.0, 100.0, 90.0, 90.0), -1)
     checkI("Trend: Kauf-Trigger dreht Verkauf",              akj.trendStep(-1, 101.0, 100.5, 100.0, 100.0, 90.0, 90.0), 1)
+
+    // ── FVG: sortiertes Einfügen ──
+    bullS = array.new<akj.Fvg>()
+    akj.fvgInsert(bullS, akj.Fvg.new(100.0, 99.0, 1, 1, 1, 0))
+    akj.fvgInsert(bullS, akj.Fvg.new(105.0, 104.0, 1, 1, 2, 0))
+    akj.fvgInsert(bullS, akj.Fvg.new(102.0, 101.0, 1, 1, 3, 0))
+    checkI("FVG insert: bullisch 3 Einträge",                 bullS.size(), 3)
+    checkF("FVG insert: bullisch absteigend nach top (1.)",  bullS.get(0).top, 105.0)
+    checkF("FVG insert: bullisch absteigend nach top (2.)",  bullS.get(1).top, 102.0)
+    checkF("FVG insert: bullisch absteigend nach top (3.)",  bullS.get(2).top, 100.0)
+    bearS = array.new<akj.Fvg>()
+    akj.fvgInsert(bearS, akj.Fvg.new(101.0, 100.0, -1, 1, 1, 0))
+    akj.fvgInsert(bearS, akj.Fvg.new(96.0, 95.0, -1, 1, 2, 0))
+    akj.fvgInsert(bearS, akj.Fvg.new(99.0, 98.0, -1, 1, 3, 0))
+    checkF("FVG insert: bärisch aufsteigend nach bot (1.)",  bearS.get(0).bot, 95.0)
+    checkF("FVG insert: bärisch aufsteigend nach bot (2.)",  bearS.get(1).bot, 98.0)
+    checkF("FVG insert: bärisch aufsteigend nach bot (3.)",  bearS.get(2).bot, 100.0)
+
+    // ── FVG: Anlegen aus drei Kerzen ──
+    bullA = array.new<akj.Fvg>()
+    bearA = array.new<akj.Fvg>()
+    qA    = array.new<akj.Fvg>()
+    checkI("FVG add: Tief 105 > Hoch[2] 103 → bullisch (1)",  akj.fvgAdd(bullA, bearA, qA, 1, 108.0, 105.0, 103.0, 101.0, 1000, 10), 1)
+    checkF("FVG add: bullisch top = Tief 105",               bullA.get(0).top, 105.0)
+    checkF("FVG add: bullisch bot = Hoch[2] 103",            bullA.get(0).bot, 103.0)
+    checkI("FVG add: bullisch dir = 1",                      bullA.get(0).dir, 1)
+    checkI("FVG add: in der Warteschlange",                  qA.size(), 1)
+    checkI("FVG add: Hoch 95 < Tief[2] 97 → bärisch (1)",     akj.fvgAdd(bullA, bearA, qA, 1, 95.0, 93.0, 99.0, 97.0, 2000, 11), 1)
+    checkF("FVG add: bärisch top = Tief[2] 97",              bearA.get(0).top, 97.0)
+    checkF("FVG add: bärisch bot = Hoch 95",                 bearA.get(0).bot, 95.0)
+    checkI("FVG add: keine Lücke → 0",                       akj.fvgAdd(bullA, bearA, qA, 1, 102.0, 100.0, 101.0, 99.0, 3000, 12), 0)
+    checkI("FVG add: Berührung (Tief = Hoch[2]) ist keine Lücke", akj.fvgAdd(bullA, bearA, qA, 1, 104.0, 103.0, 103.0, 101.0, 4000, 13), 0)
+    checkI("FVG add: Warteschlange danach 2",                qA.size(), 2)
+
+    // ── FVG: Rückschau / Ablauf ──
+    qE = array.new<akj.Fvg>()
+    qE.push(akj.Fvg.new(100.0, 99.0, 1, 1, 1, 0))
+    qE.push(akj.Fvg.new(100.0, 99.0, 1, 1, 5, 0))
+    qE.push(akj.Fvg.new(100.0, 99.0, 1, 1, 9, 0))
+    checkI("FVG expire: Kerze 12, Rückschau 5 → 2 abgelaufen", akj.fvgExpire(qE, 12, 5), 2)
+    checkI("FVG expire: Warteschlange danach 1",             qE.size(), 1)
+    checkI("FVG expire: übrig ist Kerze 9",                  qE.first().idx, 9)
+    checkI("FVG expire: Alter = Rückschau läuft nicht ab",   akj.fvgExpire(qE, 14, 5), 0)
+    checkI("FVG expire: Alter > Rückschau läuft ab",         akj.fvgExpire(qE, 15, 5), 1)
+    qD = array.new<akj.Fvg>()
+    fDead = akj.Fvg.new(100.0, 99.0, 1, 1, 1, 0)
+    fDead.dead := true
+    qD.push(fDead)
+    qD.push(akj.Fvg.new(100.0, 99.0, 1, 1, 9, 0))
+    checkI("FVG expire: schon erledigte werden entfernt, nicht gezählt", akj.fvgExpire(qD, 12, 5), 0)
+    checkI("FVG expire: erledigtes aus Warteschlange raus",  qD.size(), 1)
+
+    // ── FVG: Füllen ──
+    bullF = array.new<akj.Fvg>()
+    akj.fvgInsert(bullF, akj.Fvg.new(105.0, 103.0, 1, 1, 1, 0))
+    checkI("FVG fill: Tief 106 über dem FVG → nichts",        akj.fvgFill(bullF, true, 106.0, 110.0), 0)
+    checkF("FVG fill: top unverändert 105",                  bullF.get(0).top, 105.0)
+    checkI("FVG fill: Tief 104 → teilweise gefüllt (0)",      akj.fvgFill(bullF, true, 104.0, 110.0), 0)
+    checkF("FVG fill: Rest top = 104",                       bullF.get(0).top, 104.0)
+    checkF("FVG fill: Rest bot bleibt 103",                  bullF.get(0).bot, 103.0)
+    checkI("FVG fill: Tief 102 → komplett gefüllt (1)",       akj.fvgFill(bullF, true, 102.0, 110.0), 1)
+    checkI("FVG fill: Liste danach leer",                    bullF.size(), 0)
+    bearF = array.new<akj.Fvg>()
+    akj.fvgInsert(bearF, akj.Fvg.new(97.0, 95.0, -1, 1, 1, 0))
+    checkI("FVG fill: bärisch, Hoch 96 → teilweise",          akj.fvgFill(bearF, false, 90.0, 96.0), 0)
+    checkF("FVG fill: bärisch Rest bot = 96",                bearF.get(0).bot, 96.0)
+    checkI("FVG fill: bärisch, Hoch 97 → komplett",           akj.fvgFill(bearF, false, 90.0, 97.0), 1)
+    bullM = array.new<akj.Fvg>()
+    akj.fvgInsert(bullM, akj.Fvg.new(105.0, 103.0, 1, 1, 1, 0))
+    akj.fvgInsert(bullM, akj.Fvg.new(110.0, 108.0, 1, 1, 2, 0))
+    checkI("FVG fill: Tief 104 füllt das obere komplett, das untere teilweise", akj.fvgFill(bullM, true, 104.0, 112.0), 1)
+    checkI("FVG fill: Liste danach 1",                       bullM.size(), 1)
+    checkF("FVG fill: verbleibender Rest top = 104",         bullM.get(0).top, 104.0)
+
+    // ── FVG: Aufräumen ──
+    lstC = array.new<akj.Fvg>()
+    lstC.push(akj.Fvg.new(110.0, 109.0, 1, 1, 1, 0))
+    fMid = akj.Fvg.new(105.0, 104.0, 1, 1, 2, 0)
+    fMid.dead := true
+    lstC.push(fMid)
+    lstC.push(akj.Fvg.new(100.0, 99.0, 1, 1, 3, 0))
+    akj.fvgCompact(lstC)
+    checkI("FVG compact: erledigtes entfernt → 2",           lstC.size(), 2)
+    checkF("FVG compact: Reihenfolge bleibt (1.)",           lstC.get(0).top, 110.0)
+    checkF("FVG compact: Reihenfolge bleibt (2.)",           lstC.get(1).top, 100.0)
+
+    // ── FVG: Treffer im Gewinnbereich [Entry, Ziel 1:1] ──
+    // Long: Entry 100, SL 95 → Zone 100–105. Short: Entry 100, SL 105 → Zone 95–100.
+    noBull = array.new<akj.Fvg>()
+    noBear = array.new<akj.Fvg>()
+    bearH  = array.new<akj.Fvg>()
+    akj.fvgInsert(bearH, akj.Fvg.new(104.0, 103.0, -1, 1, 1, 0))
+    checkI("FVG hit: Long, bärisch 103–104 in der Zone → Treffer", akj.fvgHit(noBull, bearH, 1, 100.0, 95.0) ? 1 : 0, 1)
+    checkI("FVG hit: kein Setup → kein Treffer",              akj.fvgHit(noBull, bearH, 0, 100.0, 95.0) ? 1 : 0, 0)
+    bearO  = array.new<akj.Fvg>()
+    akj.fvgInsert(bearO, akj.Fvg.new(108.0, 106.0, -1, 1, 1, 0))
+    checkI("FVG hit: Long, bärisch 106–108 über der Zone → kein Treffer", akj.fvgHit(noBull, bearO, 1, 100.0, 95.0) ? 1 : 0, 0)
+    bearB  = array.new<akj.Fvg>()
+    akj.fvgInsert(bearB, akj.Fvg.new(99.5, 98.0, -1, 1, 1, 0))
+    checkI("FVG hit: Long, bärisch 98–99,5 unter dem Entry → kein Treffer", akj.fvgHit(noBull, bearB, 1, 100.0, 95.0) ? 1 : 0, 0)
+    bearE  = array.new<akj.Fvg>()
+    akj.fvgInsert(bearE, akj.Fvg.new(106.0, 104.5, -1, 1, 1, 0))
+    checkI("FVG hit: Long, bärisch 104,5–106 ragt in die Zone → Treffer", akj.fvgHit(noBull, bearE, 1, 100.0, 95.0) ? 1 : 0, 1)
+    bearX  = array.new<akj.Fvg>()
+    akj.fvgInsert(bearX, akj.Fvg.new(106.0, 105.0, -1, 1, 1, 0))
+    checkI("FVG hit: Long, bärisch beginnt genau am Ziel 105 → kein Treffer", akj.fvgHit(noBull, bearX, 1, 100.0, 95.0) ? 1 : 0, 0)
+    bearD  = array.new<akj.Fvg>()
+    fD = akj.Fvg.new(104.0, 103.0, -1, 1, 1, 0)
+    fD.dead := true
+    akj.fvgInsert(bearD, fD)
+    checkI("FVG hit: erledigtes FVG zählt nicht",             akj.fvgHit(noBull, bearD, 1, 100.0, 95.0) ? 1 : 0, 0)
+    bullH  = array.new<akj.Fvg>()
+    akj.fvgInsert(bullH, akj.Fvg.new(97.0, 96.0, 1, 1, 1, 0))
+    checkI("FVG hit: Short, bullisch 96–97 in der Zone → Treffer", akj.fvgHit(bullH, noBear, -1, 100.0, 105.0) ? 1 : 0, 1)
+    checkI("FVG hit: Long sieht bullische FVGs nicht",        akj.fvgHit(bullH, noBear, 1, 100.0, 95.0) ? 1 : 0, 0)
+    bullO  = array.new<akj.Fvg>()
+    akj.fvgInsert(bullO, akj.Fvg.new(94.0, 93.0, 1, 1, 1, 0))
+    checkI("FVG hit: Short, bullisch 93–94 unter der Zone → kein Treffer", akj.fvgHit(bullO, noBear, -1, 100.0, 105.0) ? 1 : 0, 0)
+    bullP  = array.new<akj.Fvg>()
+    akj.fvgInsert(bullP, akj.Fvg.new(96.0, 90.0, 1, 1, 1, 0))
+    checkI("FVG hit: Short, bullisch 90–96 ragt in die Zone → Treffer", akj.fvgHit(bullP, noBear, -1, 100.0, 105.0) ? 1 : 0, 1)
 
 // ═══════════════════════════════════════════════════════════════════
 // ERGEBNIS: Tabelle in der Chart-Mitte, Fehlschläge zusätzlich in den Pine Logs

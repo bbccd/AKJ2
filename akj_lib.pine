@@ -55,3 +55,144 @@ export bufLevel(float price, int dir, float tick, int ticks, float thresh, float
         if dir * (lvl + dir * buf - r) > 0
             lvl := r + dir * buf
     math.round(lvl / tick) * tick
+
+// ═══════════════════════════════════════════════════════════════════
+// FAIR VALUE GAPS (Issue #18)
+// Lücke über drei Kerzen. Bullisch: Tief der jüngsten Kerze > Hoch von vor zwei Kerzen, bärisch spiegelbildlich.
+// Performance (Issue #21): zwei SORTIERTE Listen – bullisch absteigend nach top (nächstes unter dem Kurs zuerst),
+// bärisch aufsteigend nach bot (nächstes über dem Kurs zuerst) – plus je Zeiteinheit eine Ablauf-Warteschlange in
+// Entstehungsreihenfolge. Füllen, Ablauf und Treffer-Prüfung brechen ab, sobald ein FVG außer Reichweite liegt.
+// ═══════════════════════════════════════════════════════════════════
+
+// @type Ein Fair Value Gap bzw. sein noch ungefüllter Rest.
+// @field top  Obergrenze des ungefüllten Rests.
+// @field bot  Untergrenze des ungefüllten Rests.
+// @field dir  1 = bullisch, -1 = bärisch.
+// @field tfId Zeiteinheit (frei wählbar, z. B. 0 = 4h, 1 = Daily, 2 = Weekly, 3 = Monthly).
+// @field idx  Nummer der jüngsten der drei Kerzen in ihrer Zeiteinheit (für die Rückschau).
+// @field t    Startzeit der ältesten der drei Kerzen (nur für die Anzeige).
+// @field dead Erledigt: gefüllt oder Rückschau abgelaufen (wird aus den Listen nach und nach entfernt).
+export type Fvg
+    float top
+    float bot
+    int   dir
+    int   tfId
+    int   idx
+    int   t
+    bool  dead = false
+
+// @function Fügt ein FVG sortiert ein: bullische Liste absteigend nach `top`, bärische aufsteigend nach `bot`.
+// @param list Sortierte Liste (bullisch oder bärisch, passend zu `f.dir`).
+// @param f    Das FVG.
+// @returns Nichts.
+export fvgInsert(array<Fvg> list, Fvg f) =>
+    n = list.size()
+    int i = 0
+    while i < n and (f.dir == 1 ? list.get(i).top > f.top : list.get(i).bot < f.bot)
+        i += 1
+    list.insert(i, f)
+
+// @function Prüft drei Kerzen auf eine Lücke und legt ggf. ein FVG an: in die sortierte Liste und in die
+//           Ablauf-Warteschlange seiner Zeiteinheit.
+// @param bull  Sortierte Liste der bullischen FVGs.
+// @param bear  Sortierte Liste der bärischen FVGs.
+// @param queue Ablauf-Warteschlange der Zeiteinheit (Entstehungsreihenfolge).
+// @param tfId  Zeiteinheit des FVG.
+// @param h0    Hoch der jüngsten der drei Kerzen.
+// @param l0    Tief der jüngsten der drei Kerzen.
+// @param h2    Hoch der ältesten der drei Kerzen.
+// @param l2    Tief der ältesten der drei Kerzen.
+// @param t2    Startzeit der ältesten der drei Kerzen.
+// @param idx   Nummer der jüngsten Kerze in ihrer Zeiteinheit.
+// @returns 1, wenn ein FVG angelegt wurde, sonst 0.
+export fvgAdd(array<Fvg> bull, array<Fvg> bear, array<Fvg> queue, int tfId, float h0, float l0, float h2, float l2, int t2, int idx) =>
+    Fvg f = na
+    if l0 > h2
+        f := Fvg.new(l0, h2, 1, tfId, idx, t2)
+    else if h0 < l2
+        f := Fvg.new(l2, h0, -1, tfId, idx, t2)
+    if not na(f)
+        fvgInsert(f.dir == 1 ? bull : bear, f)
+        queue.push(f)
+    na(f) ? 0 : 1
+
+// @function Rückschau: Markiert FVGs vorne in der Warteschlange als erledigt, deren Alter die Rückschau
+//           überschreitet. Bricht beim ersten noch gültigen ab (die Warteschlange ist chronologisch).
+// @param queue Ablauf-Warteschlange der Zeiteinheit.
+// @param cnt   Aktuelle Kerzennummer in dieser Zeiteinheit.
+// @param lb    Rückschau in Kerzen.
+// @returns Anzahl der neu abgelaufenen FVGs (bereits erledigte werden nur entfernt, nicht gezählt).
+export fvgExpire(array<Fvg> queue, int cnt, int lb) =>
+    int killed = 0
+    while queue.size() > 0
+        f = queue.first()
+        if f.dead
+            queue.shift()
+        else if cnt - f.idx > lb
+            f.dead := true
+            queue.shift()
+            killed += 1
+        else
+            break
+    killed
+
+// @function Füllt FVGs mit einer Kerze: komplett gefüllt → erledigt und entfernt, teilweise gefüllt → Rest
+//           verkleinert. Nur die vorderen FVGs der sortierten Liste können betroffen sein.
+// @param list Sortierte Liste (bullisch oder bärisch).
+// @param bull true = bullische Liste (gefüllt von oben durch das Kerzentief), false = bärische (durch das Hoch).
+// @param lo   Tief der Kerze.
+// @param hi   Hoch der Kerze.
+// @returns Anzahl der komplett gefüllten FVGs.
+export fvgFill(array<Fvg> list, bool bull, float lo, float hi) =>
+    int filled = 0
+    int i = 0
+    while i < list.size()
+        f = list.get(i)
+        if f.dead
+            list.remove(i)
+        else if bull ? lo < f.top : hi > f.bot
+            if bull ? lo <= f.bot : hi >= f.top
+                f.dead := true
+                list.remove(i)
+                filled += 1
+            else
+                f.top := bull ? lo : f.top
+                f.bot := bull ? f.bot : hi
+                i += 1
+        else
+            break
+    filled
+
+// @function Entfernt erledigte FVGs aus einer Liste (nur gelegentlich nötig, damit die Listen nicht wachsen).
+// @param list Sortierte Liste.
+// @returns Nichts.
+export fvgCompact(array<Fvg> list) =>
+    n = list.size()
+    if n > 0
+        for i = n - 1 to 0
+            if list.get(i).dead
+                list.remove(i)
+
+// @function Liegt ein gegenläufiges, ungefülltes FVG im Gewinnbereich [Entry, Ziel bei CRV 1:1]? Jede Überlappung
+//           zählt. Long prüft bärische FVGs ab dem nächsten über dem Kurs, Short bullische ab dem nächsten darunter;
+//           Abbruch, sobald ein FVG jenseits der Zone beginnt.
+// @param bull  Sortierte Liste der bullischen FVGs.
+// @param bear  Sortierte Liste der bärischen FVGs.
+// @param dir   Setup-Richtung: 1 = Long, -1 = Short (0 = kein Setup → false).
+// @param entry Entry-Level.
+// @param sl    Stop-Loss-Level.
+// @returns true, wenn ein gegenläufiges FVG den Gewinnbereich überlappt.
+export fvgHit(array<Fvg> bull, array<Fvg> bear, int dir, float entry, float sl) =>
+    bool hit = false
+    if dir != 0
+        r   = math.abs(entry - sl)
+        zLo = dir == 1 ? entry : entry - r
+        zHi = dir == 1 ? entry + r : entry
+        hitList = dir == 1 ? bear : bull
+        for f in hitList
+            if dir == 1 ? f.bot >= zHi : f.top <= zLo
+                break
+            if not f.dead and f.bot < zHi and f.top > zLo
+                hit := true
+                break
+    hit
