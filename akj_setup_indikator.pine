@@ -6,29 +6,17 @@ indicator("AKJ2.0 – Trend & Setup Detector", shorttitle = "AKJ2.0", overlay = 
 
 // ═══════════════════════════════════════════════════════════════════
 // EINSTELLUNGEN
+// Reihenfolge: zuerst die Regeln (beeinflussen Signale und Screener), dann die reine Darstellung, zuletzt
+// der Zeitraum. Farbe, Dicke und Linienart von Linien und Füllungen (BB, MAs, Entry/SL) stehen im Reiter
+// „Style“ – TradingView zeigt sie dort nur, wenn sie im Code konstant sind. Bedingte Hintergründe (Regime,
+// aktuelles Setup) sowie Labels, Tabellen und Linien-Objekte kennt der Style-Reiter nicht → bleiben Inputs.
 // ═══════════════════════════════════════════════════════════════════
-G_RANGE = "Zeitraum"
-startDate = input.time(timestamp("2020-01-01"), "Startdatum", group = G_RANGE)
-endDate   = input.time(timestamp("2099-12-31"), "Enddatum", group = G_RANGE)
+G_PLAY = "Regeln – Spielweise & Trend"
+playMode  = input.string("W + D", "Spielweise", options = ["W + D", "M + W", "D + 4h"], group = G_PLAY, tooltip = "W + D: Weekly übergeordnet, Trade im Daily-Chart (Weekly-Chart zeigt nur den Weekly-Trigger). M + W: Monthly übergeordnet, Trade im Weekly-Chart. D + 4h: Daily übergeordnet, Trade im 4h-Chart (Daily- und Weekly-Chart zeigen nur ihren Trigger; 4h-Chart mit regulären Handelszeiten verwenden). Das Monthly-Chart zeigt immer den Monthly-Trigger. Für mehrere Spielweisen im selben Chart den Indikator mehrfach hinzufügen.")
+bbLen     = input.int(10, "BB Länge", minval = 1, group = G_PLAY)
+bbMult    = input.float(1.0, "BB Standardabweichung", minval = 0.1, step = 0.1, group = G_PLAY)
 
-G_TREND = "Trend"
-playMode  = input.string("W + D", "Spielweise", options = ["W + D", "M + W", "D + 4h"], group = G_TREND, tooltip = "W + D: Weekly übergeordnet, Trade im Daily-Chart (Weekly-Chart zeigt nur den Weekly-Trigger). M + W: Monthly übergeordnet, Trade im Weekly-Chart. D + 4h: Daily übergeordnet, Trade im 4h-Chart (Daily- und Weekly-Chart zeigen nur ihren Trigger; 4h-Chart mit regulären Handelszeiten verwenden). Das Monthly-Chart zeigt immer den Monthly-Trigger. Für mehrere Spielweisen im selben Chart den Indikator mehrfach hinzufügen.")
-bbLen     = input.int(10, "BB Länge", minval = 1, group = G_TREND)
-bbMult    = input.float(1.0, "BB Standardabweichung", minval = 0.1, step = 0.1, group = G_TREND)
-showBB    = input.bool(true, "Bollinger-Bänder anzeigen, Dicke", group = G_TREND, inline = "bb")
-bbWidth   = input.int(3, "", minval = 1, maxval = 4, group = G_TREND, inline = "bb")
-bbFillOn  = input.bool(true, "Bereich zwischen den Bändern füllen", group = G_TREND, inline = "bbfill", tooltip = "Dezente Füllung, damit sich die Bollinger-Bänder von den Moving Averages abheben. Neutrales Grau mit geringer Deckkraft – funktioniert im hellen und dunklen Chart.")
-bbFillCol = input.color(#787B8614, "", group = G_TREND, inline = "bbfill")
-bgLongCol  = input.color(#1FBFB840, "Hintergrund Long / Short", group = G_TREND, inline = "bgcol")
-bgShortCol = input.color(#F0629240, "", group = G_TREND, inline = "bgcol")
-bgMode    = input.string("Trigger", "Hintergrund", options = ["Trigger", "Weekly-Trend", "Aus"], group = G_TREND, tooltip = "Trigger: im Trade-Chart (W + D: Daily, M + W: Weekly, D + 4h: 4h) nur gefärbt, wenn übergeordneter TF und Trade-TF beide Kauf (Long-Farbe) bzw. beide Verkauf (Short-Farbe) sind, sonst kein Hintergrund. Im Chart des übergeordneten TF (und im Monthly-Chart) zeigt er dessen Trigger. Weekly-Trend: nur der übergeordnete Trend (W, M bzw. D je nach Spielweise), wie im alten AKJ2.")
-regNextShow    = input.bool(true, "Regimewechsel auf nächster Kerze ankündigen", group = G_TREND, tooltip = "Steht nach dem Close der jüngsten Kerze fest, dass sich das Regime ändert, wird die Stelle der noch nicht vorhandenen nächsten Kerze in der Farbe des neuen Regimes hinterlegt. Weder Long noch Short: Farbe „Kein Regime“.")
-regNextSame    = input.bool(true, "Auch gleichbleibendes Regime zeigen", group = G_TREND, tooltip = "Bleibt das Regime nach dem Close gleich, wird die Stelle der nächsten Kerze in der normalen Hintergrundfarbe hinterlegt. Ohne Regime bleibt sie leer. Gilt im Daily, Weekly und Monthly.")
-regNextLongCol = input.color(#1FBFB8A0, "Wechsel Long / Short / Kein Regime", group = G_TREND, inline = "regcol")
-regNextShortCol = input.color(#F06292A0, "", group = G_TREND, inline = "regcol")
-regNextNoneCol = input.color(#FFB300A0, "", group = G_TREND, inline = "regcol")
-
-G_SETUP = "Setup & Entry"
+G_SETUP = "Regeln – Setup & Entry"
 enableLong  = input.bool(true, "Long-Setups", group = G_SETUP)
 enableShort = input.bool(true, "Short-Setups", group = G_SETUP)
 wrLen       = input.int(4, "Williams %R Länge", minval = 1, group = G_SETUP)
@@ -40,7 +28,6 @@ bufThresh   = input.float(100.0, "", minval = 0.0, step = 10.0, group = G_SETUP,
 bufPermille = input.float(0.3, "", minval = 0.0, step = 0.1, group = G_SETUP, inline = "buf")
 roundAvoid  = input.bool(true, "Glatte Zahlen meiden (Raster)", group = G_SETUP, inline = "round", tooltip = "Entry und Stop-Loss liegen mindestens einen Puffer jenseits glatter Kurse (Raster 0,50 = ganze und halbe Dollar, damit auch 5er und 10er). Läge das Level innerhalb eines Puffers vor einer Rasterstufe, wird es einen Puffer hinter die Stufe gelegt – der Abstand wird dann etwas größer.")
 roundStep   = input.float(0.5, "", minval = 0.01, step = 0.5, group = G_SETUP, inline = "round")
-expiryBars  = input.int(0, "Setup verfällt nach X Bars (0 = nie)", minval = 0, group = G_SETUP, tooltip = "Platzhalter fürs Refinement. Gezählt ab dem ersten Setup-Bar.")
 riskFilter  = input.bool(true, "Risiko-Filter", group = G_SETUP, tooltip = "Risiko = |Entry − SL| / Entry. Setups außerhalb des Bereichs werden nicht angezeigt (Linien, Marker, Hervorhebung, Alerts) und im Screener nicht gelistet. Zu klein: Gefahr, durch Volatilität ausgestoppt zu werden. Zu groß: Trade braucht zu lange.")
 riskMinWD   = input.float(2.0, "Risiko W + D min. / max. (%)", minval = 0.0, step = 0.1, group = G_SETUP, inline = "riskWD")
 riskMaxWD   = input.float(7.0, "", minval = 0.0, step = 0.1, group = G_SETUP, inline = "riskWD")
@@ -48,9 +35,20 @@ riskMinMW   = input.float(3.0, "Risiko M + W min. / max. (%)", minval = 0.0, ste
 riskMaxMW   = input.float(12.0, "", minval = 0.0, step = 0.1, group = G_SETUP, inline = "riskMW")
 riskMinDH   = input.float(1.0, "Risiko D + 4h min. / max. (%)", minval = 0.0, step = 0.1, group = G_SETUP, inline = "riskDH")
 riskMaxDH   = input.float(5.0, "", minval = 0.0, step = 0.1, group = G_SETUP, inline = "riskDH")
+expiryBars  = input.int(0, "Setup verfällt nach X Bars (0 = nie)", minval = 0, group = G_SETUP, tooltip = "Platzhalter fürs Refinement. Gezählt ab dem ersten Setup-Bar.")
+
+G_EARN = "Regeln – Earnings"
+hideNearEarn = input.bool(true, "Keine Signale im Sperrfenster", group = G_EARN)
+earnDaysWD   = input.int(8, "Sperrfenster W + D (Kalendertage vor Earnings)", minval = 0, maxval = 21, group = G_EARN)
+earnDaysMW   = input.int(8, "Sperrfenster M + W (Kalendertage vor Earnings)", minval = 0, maxval = 21, group = G_EARN)
+earnDaysDH   = input.int(8, "Sperrfenster D + 4h (Kalendertage vor Earnings)", minval = 0, maxval = 21, group = G_EARN)
+showEarnBg   = input.bool(true, "Sperrfenster grau hinterlegen", group = G_EARN, tooltip = "Grauer Hintergrund vom Beginn des Sperrfensters bis einschließlich Earnings-Tag bzw. -Woche. Vergangene Termine: TradingView liefert sie bei Veröffentlichung nach Börsenschluss erst am Folgetag – dann ist dieser Tag mit grau.")
+earnLineShow = input.bool(true, "Earnings-Linie (Daily / 4h), Farbe, Dicke", group = G_EARN, inline = "earnline", tooltip = "Senkrechte Linie auf der letzten Kerze des Sperrfensters. Vergangene Termine: auf der Kerze, auf der TradingView die Zahlen liefert – bei Veröffentlichung nach Börsenschluss also der Folgetag.")
+earnLineCol  = input.color(#55555599, "", group = G_EARN, inline = "earnline")
+earnLineW    = input.int(3, "", minval = 1, maxval = 6, group = G_EARN, inline = "earnline")
 
 // Fair Value Gaps (Issue #18): Default AUS – ausgeschaltet verhält sich der Indikator exakt wie vorher.
-G_FVG = "Fair Value Gaps"
+G_FVG = "Regeln – Fair Value Gaps"
 fvgFilter = input.bool(false, "FVG-Filter: kein Setup bei FVG im Gewinnbereich", group = G_FVG, tooltip = "Setup gilt als ungültig, wenn ein ungefülltes gegenläufiges FVG (Long: bärisch, Short: bullisch) den Bereich zwischen Entry und Ziel bei CRV 1:1 auch nur teilweise überlappt. Wirkt wie der Risiko-Filter: Setup wird nicht angezeigt (Linien, Marker, Hervorhebung, Alerts, Screener), läuft intern weiter. FVG = Lücke über drei Kerzen; zählt, bis sie komplett gefüllt ist.")
 fvgUse4h  = input.bool(true, "4h (Rückschau in Kerzen)", group = G_FVG, inline = "fvg4h", tooltip = "Nur in der Spielweise D + 4h (Trade im 4h-Chart).")
 fvgLb4h   = input.int(1000, "", minval = 1, maxval = 5000, group = G_FVG, inline = "fvg4h")
@@ -64,48 +62,45 @@ fvgShow   = input.bool(false, "Offene FVGs anzeigen (bullisch / bärisch)", grou
 fvgBullCol = input.color(#4CAF5026, "", group = G_FVG, inline = "fvgshow")
 fvgBearCol = input.color(#FF525226, "", group = G_FVG, inline = "fvgshow")
 
-G_EARN = "Earnings"
-showEarnBg   = input.bool(true, "Sperrfenster grau hinterlegen", group = G_EARN, tooltip = "Grauer Hintergrund vom Beginn des Sperrfensters bis einschließlich Earnings-Tag bzw. -Woche. Vergangene Termine: TradingView liefert sie bei Veröffentlichung nach Börsenschluss erst am Folgetag – dann ist dieser Tag mit grau.")
-earnLineShow = input.bool(true, "Earnings-Linie (Daily / 4h), Farbe, Dicke", group = G_EARN, inline = "earnline", tooltip = "Senkrechte Linie auf der letzten Kerze des Sperrfensters. Vergangene Termine: auf der Kerze, auf der TradingView die Zahlen liefert – bei Veröffentlichung nach Börsenschluss also der Folgetag.")
-earnLineCol  = input.color(#55555599, "", group = G_EARN, inline = "earnline")
-earnLineW    = input.int(3, "", minval = 1, maxval = 6, group = G_EARN, inline = "earnline")
-hideNearEarn = input.bool(true, "Keine Signale im Sperrfenster", group = G_EARN)
-earnDaysWD   = input.int(8, "Sperrfenster W + D (Kalendertage vor Earnings)", minval = 0, maxval = 21, group = G_EARN)
-earnDaysMW   = input.int(8, "Sperrfenster M + W (Kalendertage vor Earnings)", minval = 0, maxval = 21, group = G_EARN)
-earnDaysDH   = input.int(8, "Sperrfenster D + 4h (Kalendertage vor Earnings)", minval = 0, maxval = 21, group = G_EARN)
-
-// Farbverlauf kurz → lang wie im TradingView-„Moving Average Ribbon“: Gelb → Orange → Rot.
-G_MA = "Moving Averages"
-maShow    = input.bool(true, "Moving Averages anzeigen", group = G_MA)
-maType    = input.string("SMA", "Typ (für alle)", options = ["SMA", "EMA"], group = G_MA)
-maWidth   = input.int(3, "Liniendicke", minval = 1, maxval = 4, group = G_MA)
-maStyleIn = input.string("Gestrichelt", "Linienart", options = ["Durchgezogen", "Gestrichelt", "Gepunktet"], group = G_MA)
-ma1On  = input.bool(true, "MA 1", group = G_MA, inline = "ma1")
-ma1Len = input.int(20, "", minval = 1, group = G_MA, inline = "ma1")
-ma1Col = input.color(#F6C309, "", group = G_MA, inline = "ma1")
-ma2On  = input.bool(true, "MA 2", group = G_MA, inline = "ma2")
-ma2Len = input.int(50, "", minval = 1, group = G_MA, inline = "ma2")
-ma2Col = input.color(#FB9800, "", group = G_MA, inline = "ma2")
-ma3On  = input.bool(true, "MA 3", group = G_MA, inline = "ma3")
-ma3Len = input.int(150, "", minval = 1, group = G_MA, inline = "ma3")
-ma3Col = input.color(#FB6500, "", group = G_MA, inline = "ma3")
-ma4On  = input.bool(true, "MA 4", group = G_MA, inline = "ma4")
-ma4Len = input.int(200, "", minval = 1, group = G_MA, inline = "ma4")
-ma4Col = input.color(#F60C0C, "", group = G_MA, inline = "ma4")
-
-G_INFO = "Zusatzinfos"
-athShow  = input.bool(true, "All-Time High anzeigen", group = G_INFO)
-athCol   = input.color(#FFE135, "Farbe, Dicke", group = G_INFO, inline = "ath")
-athWidth = input.int(3, "", minval = 1, maxval = 6, group = G_INFO, inline = "ath")
-symInfoGap  = input.float(6.0, "Abstand der Tabelle von oben (% der Charthöhe)", minval = 0.0, maxval = 40.0, step = 0.5, group = G_INFO, tooltip = "Unsichtbare Leerzeile über der Tabelle, damit sie unter der Statuszeile steht. Bei vielen Indikatoren in der Statuszeile erhöhen.")
-symInfoShow = input.bool(true, "Sektor / Industrie / Sektor-ETF (oben Mitte)", group = G_INFO, tooltip = "Sektor und Industrie kommen direkt von TradingView. Der Sektor-ETF (Select Sector SPDR) ist eine eigene Näherung aus dem TradingView-Sektor (≠ GICS) und gilt nur für S&P-500-Aktien – ob die Aktie im S&P 500 ist, liefert Pine nicht. Daher „(evtl. …)“, nur bei US-Aktien.")
-
-G_SHOW = "Anzeige"
-sigSizeIn   = input.string("Normal", "Größe Signal-Marker", options = ["Klein", "Normal", "Groß"], group = G_SHOW)
+G_SHOW = "Anzeige – Trend & Setup"
+bgMode    = input.string("Trigger", "Hintergrund", options = ["Trigger", "Übergeordneter Trend", "Aus"], group = G_SHOW, tooltip = "Trigger: im Trade-Chart (W + D: Daily, M + W: Weekly, D + 4h: 4h) nur gefärbt, wenn übergeordneter TF und Trade-TF beide Kauf (Long-Farbe) bzw. beide Verkauf (Short-Farbe) sind, sonst kein Hintergrund. Im Chart des übergeordneten TF (und im Monthly-Chart) zeigt er dessen Trigger. Übergeordneter Trend: nur der übergeordnete Trend (W, M bzw. D je nach Spielweise), wie im alten AKJ2.")
+bgLongCol  = input.color(#1FBFB840, "Hintergrund Long / Short", group = G_SHOW, inline = "bgcol", tooltip = "Auch Farbe der Signal-Marker L / S (deckend).")
+bgShortCol = input.color(#F0629240, "", group = G_SHOW, inline = "bgcol")
+regNextShow    = input.bool(true, "Regimewechsel auf nächster Kerze ankündigen", group = G_SHOW, tooltip = "Steht nach dem Close der jüngsten Kerze fest, dass sich das Regime ändert, wird die Stelle der noch nicht vorhandenen nächsten Kerze in der Farbe des neuen Regimes hinterlegt. Weder Long noch Short: Farbe „Kein Regime“.")
+regNextSame    = input.bool(true, "Auch gleichbleibendes Regime zeigen", group = G_SHOW, tooltip = "Bleibt das Regime nach dem Close gleich, wird die Stelle der nächsten Kerze in der normalen Hintergrundfarbe hinterlegt. Ohne Regime bleibt sie leer. Gilt im Daily, Weekly und Monthly.")
+regNextLongCol = input.color(#1FBFB8A0, "Wechsel Long / Short / Kein Regime", group = G_SHOW, inline = "regcol")
+regNextShortCol = input.color(#F06292A0, "", group = G_SHOW, inline = "regcol")
+regNextNoneCol = input.color(#FFB300A0, "", group = G_SHOW, inline = "regcol")
 hlCurrent   = input.bool(true, "Aktuelles Setup hervorheben", group = G_SHOW, tooltip = "Besteht auf der jüngsten Kerze ein offenes Setup, wird der Hintergrund ab der ersten Signalkerze (max. 10 Kerzen) eingefärbt und rechts ein Label mit Entry und SL angezeigt. Aus = Darstellung wie alle anderen Setups.")
 hlLongCol   = input.color(#2979FF66, "Aktuelles Setup Long / Short", group = G_SHOW, inline = "hlcol")
 hlShortCol  = input.color(#AA00FF66, "", group = G_SHOW, inline = "hlcol")
-showTable   = input.bool(false, "Status-Tabelle anzeigen", group = G_SHOW)
+sigSizeIn   = input.string("Normal", "Größe Signal-Marker", options = ["Klein", "Normal", "Groß"], group = G_SHOW)
+showBB    = input.bool(true, "Bollinger-Bänder anzeigen", group = G_SHOW, tooltip = "Farbe und Dicke der Bänder sowie die Füllung dazwischen: Reiter „Style“.")
+
+G_MA = "Anzeige – Moving Averages"
+maShow    = input.bool(true, "Moving Averages anzeigen", group = G_MA, tooltip = "Farbe, Dicke und Linienart je MA: Reiter „Style“.")
+maType    = input.string("SMA", "Typ (für alle)", options = ["SMA", "EMA"], group = G_MA)
+ma1On  = input.bool(true, "MA 1", group = G_MA, inline = "ma1")
+ma1Len = input.int(20, "", minval = 1, group = G_MA, inline = "ma1")
+ma2On  = input.bool(true, "MA 2", group = G_MA, inline = "ma2")
+ma2Len = input.int(50, "", minval = 1, group = G_MA, inline = "ma2")
+ma3On  = input.bool(true, "MA 3", group = G_MA, inline = "ma3")
+ma3Len = input.int(150, "", minval = 1, group = G_MA, inline = "ma3")
+ma4On  = input.bool(true, "MA 4", group = G_MA, inline = "ma4")
+ma4Len = input.int(200, "", minval = 1, group = G_MA, inline = "ma4")
+
+G_INFO = "Anzeige – Zusatzinfos"
+showTable   = input.bool(false, "Status-Tabelle anzeigen (oben rechts)", group = G_INFO, tooltip = "Trend, Williams %R, Setup-Status, Entry/SL und nächster Earnings-Termin.")
+symInfoShow = input.bool(true, "Sektor / Industrie / Sektor-ETF (oben Mitte)", group = G_INFO, tooltip = "Sektor und Industrie kommen direkt von TradingView. Der Sektor-ETF (Select Sector SPDR) ist eine eigene Näherung aus dem TradingView-Sektor (≠ GICS) und gilt nur für S&P-500-Aktien – ob die Aktie im S&P 500 ist, liefert Pine nicht. Daher „(evtl. …)“, nur bei US-Aktien.")
+symInfoGap  = input.float(6.0, "Abstand der Tabelle von oben (% der Charthöhe)", minval = 0.0, maxval = 40.0, step = 0.5, group = G_INFO, tooltip = "Unsichtbare Leerzeile über der Tabelle, damit sie unter der Statuszeile steht. Bei vielen Indikatoren in der Statuszeile erhöhen.")
+athShow  = input.bool(true, "All-Time High anzeigen", group = G_INFO)
+athCol   = input.color(#FFE135, "Farbe, Dicke", group = G_INFO, inline = "ath")
+athWidth = input.int(3, "", minval = 1, maxval = 6, group = G_INFO, inline = "ath")
+
+G_RANGE = "Zeitraum"
+startDate = input.time(timestamp("2020-01-01"), "Startdatum", group = G_RANGE)
+endDate   = input.time(timestamp("2099-12-31"), "Enddatum", group = G_RANGE)
+
 sigSize     = sigSizeIn == "Klein" ? size.small : sigSizeIn == "Normal" ? size.normal : size.large
 // Marker-Farben = Hintergrundfarben, deckend (Verwandtschaft sichtbar)
 sigLongCol  = color.new(bgLongCol, 0)
@@ -526,38 +521,39 @@ setupOk   = riskOk and not fvgHit
 // Bewusst keine Schätzung des Termins (vom Nutzer so entschieden); Treffer im Chart prüfen.
 // ═══════════════════════════════════════════════════════════════════
 scrActive = setupDir != 0 and setupOk
-plot(scrActive ? setupDir : 0, "Setup-Status (1 Long / -1 Short / 0)", display = display.data_window)
-plot(scrActive ? entryLvl : na, "Setup Entry", display = display.data_window)
-plot(scrActive ? slLvl : na, "Setup SL", display = display.data_window)
-plot(setupDir != 0 ? riskPct : na, "Setup Risiko (%)", display = display.data_window)
+plot(scrActive ? setupDir : 0, "Setup-Status (1 Long / -1 Short / 0)", display = display.data_window, editable = false)
+plot(scrActive ? entryLvl : na, "Setup Entry", display = display.data_window, editable = false)
+plot(scrActive ? slLvl : na, "Setup SL", display = display.data_window, editable = false)
+plot(setupDir != 0 ? riskPct : na, "Setup Risiko (%)", display = display.data_window, editable = false)
 // Diagnose: Tage bis zu den nächsten Earnings (leer = TradingView liefert keinen Termin).
-plot(daysToEarn, "Tage bis Earnings", display = display.data_window)
+plot(daysToEarn, "Tage bis Earnings", display = display.data_window, editable = false)
 
 // ═══════════════════════════════════════════════════════════════════
 // DARSTELLUNG – Bollinger-Bänder & Trend
 // ═══════════════════════════════════════════════════════════════════
-plot(showBB ? basis : na, "BB Mid",   color.new(color.gray, 20), bbWidth)
-pBbUpper = plot(showBB ? upper : na, "BB Upper", color.new(color.blue, 40), bbWidth)
-pBbLower = plot(showBB ? lower : na, "BB Lower", color.new(color.red, 40), bbWidth)
+// Farbe, Dicke und Füllung im Reiter „Style“ (dort nur sichtbar, weil hier konstant).
+plot(showBB ? basis : na, "BB Mid",   color.new(color.gray, 20), 3)
+pBbUpper = plot(showBB ? upper : na, "BB Upper", color.new(color.blue, 40), 3)
+pBbLower = plot(showBB ? lower : na, "BB Lower", color.new(color.red, 40), 3)
 // Füllung zwischen den Bändern (Issue #15): sehr leichtes Grau, deutlich schwächer als Trigger- und Earnings-Hintergrund.
-fill(pBbUpper, pBbLower, bbFillOn ? bbFillCol : na, "BB Füllung")
+fill(pBbUpper, pBbLower, #787B8614, "BB Füllung")
 
 // Moving Averages (unabhängig von der Setup-Logik, nur zur Orientierung)
-maStyle = maStyleIn == "Gestrichelt" ? plot.linestyle_dashed : maStyleIn == "Gepunktet" ? plot.linestyle_dotted : plot.linestyle_solid
 ma1 = maCalc(ma1Len)
 ma2 = maCalc(ma2Len)
 ma3 = maCalc(ma3Len)
 ma4 = maCalc(ma4Len)
 // Plot-Titel müssen konstant sein – sie nennen die Standardlänge (bei geänderter Länge nicht mehr exakt).
-plot(maShow and ma1On ? ma1 : na, "MA 20", ma1Col, maWidth, linestyle = maStyle)
-plot(maShow and ma2On ? ma2 : na, "MA 50", ma2Col, maWidth, linestyle = maStyle)
-plot(maShow and ma3On ? ma3 : na, "MA 150", ma3Col, maWidth, linestyle = maStyle)
-plot(maShow and ma4On ? ma4 : na, "MA 200", ma4Col, maWidth, linestyle = maStyle)
+// Farbe, Dicke, Linienart im Reiter „Style“; Farbverlauf kurz → lang wie im TradingView-„MA Ribbon“: Gelb → Orange → Rot.
+plot(maShow and ma1On ? ma1 : na, "MA 20", #F6C309, 3, linestyle = plot.linestyle_dashed)
+plot(maShow and ma2On ? ma2 : na, "MA 50", #FB9800, 3, linestyle = plot.linestyle_dashed)
+plot(maShow and ma3On ? ma3 : na, "MA 150", #FB6500, 3, linestyle = plot.linestyle_dashed)
+plot(maShow and ma4On ? ma4 : na, "MA 200", #F60C0C, 3, linestyle = plot.linestyle_dashed)
 
-bgLong  = bgMode == "Trigger" ? longTrend  : bgMode == "Weekly-Trend" and htfState == 1
-bgShort = bgMode == "Trigger" ? shortTrend : bgMode == "Weekly-Trend" and htfState == -1
-bgcolor(bgLong  ? bgLongCol  : na, title = "Long-Trigger Zone")
-bgcolor(bgShort ? bgShortCol : na, title = "Short-Trigger Zone")
+bgLong  = bgMode == "Trigger" ? longTrend  : bgMode == "Übergeordneter Trend" and htfState == 1
+bgShort = bgMode == "Trigger" ? shortTrend : bgMode == "Übergeordneter Trend" and htfState == -1
+bgcolor(bgLong  ? bgLongCol  : na, title = "Long-Trigger Zone", editable = false)
+bgcolor(bgShort ? bgShortCol : na, title = "Short-Trigger Zone", editable = false)
 
 // Hintergrund der nächsten Kerze vorab zeigen: Sie existiert noch nicht, darum per offset = 1 rechts der
 // jüngsten Kerze. Sobald sie da ist, übernimmt der normale Hintergrund. Nach Handelsschluss ohne neuen Tick
@@ -569,17 +565,17 @@ regShow    = regNextShow and tfValid and bgMode != "Aus" and regBarDone
 regChange  = regShow and regNext != regNow
 regSame    = regShow and regNextSame and regNext == regNow and regNext != 0
 regBgCol   = regChange ? (regNext == 1 ? regNextLongCol : regNext == -1 ? regNextShortCol : regNextNoneCol) : regSame ? (regNext == 1 ? bgLongCol : bgShortCol) : na
-bgcolor(regBgCol, offset = 1, title = "Regimewechsel nächste Kerze")
+bgcolor(regBgCol, offset = 1, title = "Regimewechsel nächste Kerze", editable = false)
 
 // Earnings-Sperrfenster grau (über dem Trigger-Hintergrund).
 // Aktueller Termin: direkt. Vergangene Termine: rückwirkend per Offset (max. 16 Kerzen ≈ 21 Kalendertage).
-bgcolor(earnBgOn and earnSoon ? EARN_COL : na, title = "Earnings-Sperrfenster")
+bgcolor(earnBgOn and earnSoon ? EARN_COL : na, title = "Earnings-Sperrfenster", editable = false)
 // Nächste Kerze (noch nicht vorhanden): Termin und Dauer geschätzt, Feiertage unberücksichtigt. Grau liegt wie bei
 // den normalen Kerzen über der Regime-Farbe.
 // 4h: Die nächste Kerze liegt am selben Tag, außer nach der letzten Kerze der Sitzung.
 nextBarShift = (isWeekly ? 7 : timeframe.isintraday and not session.islastbar_regular ? 0 : dayofweek == dayofweek.friday ? 3 : 1) * DAY_MS
 earnNextBar  = inEarnWin(barFirstDay + nextBarShift, barLastDay + nextBarShift)
-bgcolor(regNextShow and regBarDone and earnBgOn and earnNextBar ? EARN_COL : na, offset = 1, title = "Earnings-Sperrfenster nächste Kerze")
+bgcolor(regNextShow and regBarDone and earnBgOn and earnNextBar ? EARN_COL : na, offset = 1, title = "Earnings-Sperrfenster nächste Kerze", editable = false)
 bgcolor(pastEarnCol(0),  offset = 0,   editable = false)
 bgcolor(pastEarnCol(1),  offset = -1,  editable = false)
 bgcolor(pastEarnCol(2),  offset = -2,  editable = false)
@@ -645,7 +641,7 @@ curCol    = setupDir == 1 ? hlLongCol : hlShortCol
 curSetupCol(int k) =>
     curActive and bar_index - k >= setupStart ? curCol : na
 
-bgcolor(curSetupCol(0), offset = 0,  title = "Aktuelles Setup")
+bgcolor(curSetupCol(0), offset = 0,  title = "Aktuelles Setup", editable = false)
 bgcolor(curSetupCol(1), offset = -1, editable = false)
 bgcolor(curSetupCol(2), offset = -2, editable = false)
 bgcolor(curSetupCol(3), offset = -3, editable = false)
@@ -723,11 +719,11 @@ if symInfoShow and barstate.islast
     table.cell(symTbl, 2, 1, etf == "–" ? "–" : "(evtl. " + etf + ")", bgcolor = SYM_BG, text_color = color.new(chart.fg_color, 30), text_size = size.small, tooltip = "Sektor-ETF (Select Sector SPDR) – eigene Näherung aus dem TradingView-Sektor. Gilt nur, falls die Aktie im S&P 500 ist; das liefert Pine nicht.")
 
 // Nur im Datenfenster sichtbar (zur Kontrolle, was der Indikator je Bar sieht)
-plot(htfState, "Trend übergeordnet W bzw. M (1 / -1)", display = display.data_window)
-plot(ltfState, "Trend Trade-TF D bzw. W (1 / -1)", display = display.data_window)
-plot(wrClosed, "Williams %R (abgeschl. Kerze)", display = display.data_window)
-plot(fvgOn ? fvgAlive : na, "Offene FVGs (Anzahl)", display = display.data_window)
-plot(fvgOn and hasLvls ? (fvgInZone ? 1 : 0) : na, "FVG im Gewinnbereich (1 / 0)", display = display.data_window)
+plot(htfState, "Trend übergeordnet W bzw. M (1 / -1)", display = display.data_window, editable = false)
+plot(ltfState, "Trend Trade-TF D bzw. W (1 / -1)", display = display.data_window, editable = false)
+plot(wrClosed, "Williams %R (abgeschl. Kerze)", display = display.data_window, editable = false)
+plot(fvgOn ? fvgAlive : na, "Offene FVGs (Anzahl)", display = display.data_window, editable = false)
+plot(fvgOn and hasLvls ? (fvgInZone ? 1 : 0) : na, "FVG im Gewinnbereich (1 / 0)", display = display.data_window, editable = false)
 
 // ═══════════════════════════════════════════════════════════════════
 // ZUSATZINFOS – Offene FVGs als Kästen (nur zur Kontrolle, Default aus), nächste am Kurs zuerst, max. 400
