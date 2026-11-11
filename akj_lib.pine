@@ -1,0 +1,431 @@
+//@version=6
+// @description AKJ2 – reine Funktionen der „Aktien-Kann-Jeder“-Strategie: Trend-Schritt am Bollinger-Band, Puffer
+// und Entry-/SL-Level. Alle Eingaben sind Parameter – kein Zugriff auf Inputs, Kerzenserien oder syminfo. Dadurch
+// lassen sich die Funktionen mit erfundenen Werten testen (tests/akj_tests.pine) und von Indikator und Strategie
+// gemeinsam nutzen.
+//
+// Veröffentlichen: Datei im Pine-Editor als Library öffnen → „Skript veröffentlichen“ → Sichtbarkeit „Privat“.
+// Jede Änderung ergibt eine neue Version. Einbinden in anderen Skripten:
+//     import bBccdde/AKJ2/<Version> as akj
+//     akj.bufLevel(high, 1, syminfo.mintick, 3, 100.0, 0.3, true, 0.5)
+library("AKJ2", overlay = true)
+
+// @function Ein Schritt des gehaltenen Trendzustands (Guide: 2x Close über dem oberen BB = Kauf, 2x Close unter
+//           dem unteren BB = Verkauf; gilt, bis der Gegentrigger kommt).
+// @param state Bisheriger Zustand: 1 = Kauf, -1 = Verkauf, 0 = keiner.
+// @param c0    Close der aktuellen Kerze.
+// @param c1    Close der Vorkerze.
+// @param up0   Oberes Bollinger-Band der aktuellen Kerze.
+// @param up1   Oberes Bollinger-Band der Vorkerze.
+// @param lo0   Unteres Bollinger-Band der aktuellen Kerze.
+// @param lo1   Unteres Bollinger-Band der Vorkerze.
+// @returns Neuer Zustand: 1, -1 oder unverändert `state`.
+export trendStep(int state, float c0, float c1, float up0, float up1, float lo0, float lo1) =>
+    c0 > up0 and c1 > up1 ? 1 : c0 < lo0 and c1 < lo1 ? -1 : state
+
+// @function Puffer in Preiseinheiten (Issue #24, Handelsplan): bis zur Kurs-Schwelle fest `ticks` Ticks, darüber
+//           `permille` ‰ vom Kurs, auf den nächsten Tick aufgerundet (0,3 ‰ bei 500 → 0,15).
+// @param price    Bezugskurs (Hoch bzw. Tief der Signalkerze).
+// @param tick     Tick-Größe des Symbols (syminfo.mintick).
+// @param ticks    Fester Puffer in Ticks bis zur Schwelle.
+// @param thresh   Kurs-Schwelle; darüber gilt der Promille-Puffer.
+// @param permille Puffer in ‰ vom Kurs oberhalb der Schwelle.
+// @returns Puffer in Preiseinheiten, Vielfaches von `tick`.
+export priceBuffer(float price, float tick, int ticks, float thresh, float permille) =>
+    raw = price > thresh ? price * permille / 1000.0 : ticks * tick
+    math.ceil(raw / tick - 1e-6) * tick
+
+// @function Entry- bzw. SL-Level: Bezugskurs ± Puffer. Glatte Zahlen meiden (Issue #24): Liegt die nächste
+//           Rasterstufe (z. B. ganzer/halber Dollar) in Richtung `dir` näher als Level + ein weiterer Puffer, wird
+//           das Level einen Puffer jenseits dieser Stufe gelegt.
+// @param price    Bezugskurs (Hoch bzw. Tief der Signalkerze).
+// @param dir      1 = Level über dem Kurs (Long-Entry, Short-SL), -1 = darunter (Long-SL, Short-Entry).
+// @param tick     Tick-Größe des Symbols (syminfo.mintick).
+// @param ticks    Fester Puffer in Ticks bis zur Schwelle.
+// @param thresh   Kurs-Schwelle; darüber gilt der Promille-Puffer.
+// @param permille Puffer in ‰ vom Kurs oberhalb der Schwelle.
+// @param avoid    Glatte Zahlen meiden an/aus.
+// @param step     Raster für glatte Zahlen (0,5 = ganze und halbe Dollar).
+// @returns Level, auf den Tick gerundet.
+export bufLevel(float price, int dir, float tick, int ticks, float thresh, float permille, bool avoid, float step) =>
+    buf = priceBuffer(price, tick, ticks, thresh, permille)
+    lvl = price + dir * buf
+    if avoid and step > 0
+        r = (dir == 1 ? math.ceil(price / step - 1e-6) : math.floor(price / step + 1e-6)) * step
+        if dir * (lvl + dir * buf - r) > 0
+            lvl := r + dir * buf
+    math.round(lvl / tick) * tick
+
+// ═══════════════════════════════════════════════════════════════════
+// FAIR VALUE GAPS (Issue #18)
+// Lücke über drei Kerzen. Bullisch: Tief der jüngsten Kerze > Hoch von vor zwei Kerzen, bärisch spiegelbildlich.
+// Performance (Issue #21): zwei SORTIERTE Listen – bullisch absteigend nach top (nächstes unter dem Kurs zuerst),
+// bärisch aufsteigend nach bot (nächstes über dem Kurs zuerst) – plus je Zeiteinheit eine Ablauf-Warteschlange in
+// Entstehungsreihenfolge. Füllen, Ablauf und Treffer-Prüfung brechen ab, sobald ein FVG außer Reichweite liegt.
+// ═══════════════════════════════════════════════════════════════════
+
+// @type Ein Fair Value Gap bzw. sein noch ungefüllter Rest.
+// @field top  Obergrenze des ungefüllten Rests.
+// @field bot  Untergrenze des ungefüllten Rests.
+// @field dir  1 = bullisch, -1 = bärisch.
+// @field tfId Zeiteinheit (frei wählbar, z. B. 0 = 4h, 1 = Daily, 2 = Weekly, 3 = Monthly).
+// @field idx  Nummer der jüngsten der drei Kerzen in ihrer Zeiteinheit (für die Rückschau).
+// @field t    Startzeit der ältesten der drei Kerzen (nur für die Anzeige).
+// @field dead Erledigt: gefüllt oder Rückschau abgelaufen (wird aus den Listen nach und nach entfernt).
+export type Fvg
+    float top
+    float bot
+    int   dir
+    int   tfId
+    int   idx
+    int   t
+    bool  dead = false
+
+// @function Fügt ein FVG sortiert ein: bullische Liste absteigend nach `top`, bärische aufsteigend nach `bot`.
+// @param list Sortierte Liste (bullisch oder bärisch, passend zu `f.dir`).
+// @param f    Das FVG.
+// @returns Nichts.
+export fvgInsert(array<Fvg> list, Fvg f) =>
+    n = list.size()
+    int i = 0
+    while i < n and (f.dir == 1 ? list.get(i).top > f.top : list.get(i).bot < f.bot)
+        i += 1
+    list.insert(i, f)
+
+// @function Prüft drei Kerzen auf eine Lücke und legt ggf. ein FVG an: in die sortierte Liste und in die
+//           Ablauf-Warteschlange seiner Zeiteinheit.
+// @param bull  Sortierte Liste der bullischen FVGs.
+// @param bear  Sortierte Liste der bärischen FVGs.
+// @param queue Ablauf-Warteschlange der Zeiteinheit (Entstehungsreihenfolge).
+// @param tfId  Zeiteinheit des FVG.
+// @param h0    Hoch der jüngsten der drei Kerzen.
+// @param l0    Tief der jüngsten der drei Kerzen.
+// @param h2    Hoch der ältesten der drei Kerzen.
+// @param l2    Tief der ältesten der drei Kerzen.
+// @param t2    Startzeit der ältesten der drei Kerzen.
+// @param idx   Nummer der jüngsten Kerze in ihrer Zeiteinheit.
+// @returns 1, wenn ein FVG angelegt wurde, sonst 0.
+export fvgAdd(array<Fvg> bull, array<Fvg> bear, array<Fvg> queue, int tfId, float h0, float l0, float h2, float l2, int t2, int idx) =>
+    Fvg f = na
+    if l0 > h2
+        f := Fvg.new(l0, h2, 1, tfId, idx, t2)
+    else if h0 < l2
+        f := Fvg.new(l2, h0, -1, tfId, idx, t2)
+    if not na(f)
+        fvgInsert(f.dir == 1 ? bull : bear, f)
+        queue.push(f)
+    na(f) ? 0 : 1
+
+// @function Rückschau: Markiert FVGs vorne in der Warteschlange als erledigt, deren Alter die Rückschau
+//           überschreitet. Bricht beim ersten noch gültigen ab (die Warteschlange ist chronologisch).
+// @param queue Ablauf-Warteschlange der Zeiteinheit.
+// @param cnt   Aktuelle Kerzennummer in dieser Zeiteinheit.
+// @param lb    Rückschau in Kerzen.
+// @returns Anzahl der neu abgelaufenen FVGs (bereits erledigte werden nur entfernt, nicht gezählt).
+export fvgExpire(array<Fvg> queue, int cnt, int lb) =>
+    int killed = 0
+    while queue.size() > 0
+        f = queue.first()
+        if f.dead
+            queue.shift()
+        else if cnt - f.idx > lb
+            f.dead := true
+            queue.shift()
+            killed += 1
+        else
+            break
+    killed
+
+// @function Füllt FVGs mit einer Kerze: komplett gefüllt → erledigt und entfernt, teilweise gefüllt → Rest
+//           verkleinert. Nur die vorderen FVGs der sortierten Liste können betroffen sein.
+// @param list Sortierte Liste (bullisch oder bärisch).
+// @param bull true = bullische Liste (gefüllt von oben durch das Kerzentief), false = bärische (durch das Hoch).
+// @param lo   Tief der Kerze.
+// @param hi   Hoch der Kerze.
+// @returns Anzahl der komplett gefüllten FVGs.
+export fvgFill(array<Fvg> list, bool bull, float lo, float hi) =>
+    int filled = 0
+    int i = 0
+    while i < list.size()
+        f = list.get(i)
+        if f.dead
+            list.remove(i)
+        else if bull ? lo < f.top : hi > f.bot
+            if bull ? lo <= f.bot : hi >= f.top
+                f.dead := true
+                list.remove(i)
+                filled += 1
+            else
+                f.top := bull ? lo : f.top
+                f.bot := bull ? f.bot : hi
+                i += 1
+        else
+            break
+    filled
+
+// @function Entfernt erledigte FVGs aus einer Liste (nur gelegentlich nötig, damit die Listen nicht wachsen).
+// @param list Sortierte Liste.
+// @returns Nichts.
+export fvgCompact(array<Fvg> list) =>
+    n = list.size()
+    if n > 0
+        for i = n - 1 to 0
+            if list.get(i).dead
+                list.remove(i)
+
+// @function Liegt ein gegenläufiges, ungefülltes FVG im Gewinnbereich [Entry, Ziel bei CRV 1:1]? Jede Überlappung
+//           zählt. Long prüft bärische FVGs ab dem nächsten über dem Kurs, Short bullische ab dem nächsten darunter;
+//           Abbruch, sobald ein FVG jenseits der Zone beginnt.
+// @param bull  Sortierte Liste der bullischen FVGs.
+// @param bear  Sortierte Liste der bärischen FVGs.
+// @param dir   Setup-Richtung: 1 = Long, -1 = Short (0 = kein Setup → false).
+// @param entry Entry-Level.
+// @param sl    Stop-Loss-Level.
+// @returns true, wenn ein gegenläufiges FVG den Gewinnbereich überlappt.
+export fvgHit(array<Fvg> bull, array<Fvg> bear, int dir, float entry, float sl) =>
+    bool hit = false
+    if dir != 0
+        r   = math.abs(entry - sl)
+        zLo = dir == 1 ? entry : entry - r
+        zHi = dir == 1 ? entry + r : entry
+        hitList = dir == 1 ? bear : bull
+        for f in hitList
+            if dir == 1 ? f.bot >= zHi : f.top <= zLo
+                break
+            if not f.dead and f.bot < zHi and f.top > zLo
+                hit := true
+                break
+    hit
+
+// ═══════════════════════════════════════════════════════════════════
+// KLEINE HILFSFUNKTIONEN (Setup-Verfall, Earnings-Kalender, Sektor-ETF)
+// ═══════════════════════════════════════════════════════════════════
+
+// @function Setup-Verfall (Hook fürs Refinement): Ist ein offenes Setup nach `expiryBars` Kerzen verfallen?
+// @param barIndex   Aktuelle Kerzennummer.
+// @param startBar   Kerzennummer der ersten Signalkerze.
+// @param expiryBars Verfall nach so vielen Kerzen; 0 = nie.
+// @returns true, wenn das Setup verfallen ist.
+export setupExpired(int barIndex, int startBar, int expiryBars) =>
+    expiryBars > 0 and barIndex - startBar >= expiryBars
+
+// @function Kalendertag eines Zeitpunkts in einer Zeitzone, als Mitternacht UTC dieses Tages (ms). Damit lassen sich
+//           Kerzen und Termine nach Kalendertagen vergleichen, unabhängig von der Uhrzeit (Issue #1).
+// @param t  Zeitpunkt in ms (z. B. `time`).
+// @param tz Zeitzone, z. B. `syminfo.timezone`.
+// @returns Mitternacht UTC des Kalendertags von `t` in `tz`.
+export dayOf(int t, string tz) =>
+    timestamp("UTC", year(t, tz), month(t, tz), dayofmonth(t, tz), 0, 0)
+
+// @function Earnings-Tag als UTC-Datum (Mitternacht UTC). Stimmt für Termine mit Uhrzeit (vor Börsenbeginn bis
+//           abends) wie für reine Datumsangaben (Mitternacht UTC – in New Yorker Zeit wäre das schon der Vortag).
+// @param nextEarn Earnings-Zeitpunkt in ms (`earnings.future_time`), na = kein Termin.
+// @returns Mitternacht UTC des Earnings-Tags, na ohne Termin.
+export earnDay(int nextEarn) =>
+    na(nextEarn) ? int(na) : nextEarn - nextEarn % 86400000
+
+// @function Liegt der Zeitraum [firstDay, lastDay] (Kalendertage, Mitternacht UTC) im Sperrfenster
+//           [Earnings-Tag − winMs, Earnings-Tag]? Eine Kerze liegt im Fenster, wenn einer ihrer Tage darin liegt
+//           (Daily wie Weekly).
+// @param firstDay Erster Kalendertag der Kerze (aus `dayOf`).
+// @param lastDay  Letzter Kalendertag der Kerze (aus `dayOf`).
+// @param eDay     Earnings-Tag (aus `earnDay`), na = kein Termin → false.
+// @param winMs    Länge des Sperrfensters vor dem Earnings-Tag in ms (Kalendertage × 86400000).
+// @returns true, wenn die Kerze im Sperrfenster liegt.
+export inEarnWin(int firstDay, int lastDay, int eDay, int winMs) =>
+    not na(eDay) and lastDay >= eDay - winMs and firstDay <= eDay
+
+// @function TradingView-Sektor (FactSet-Einteilung) → SPDR-Sektor-ETF (GICS). Näherung; bekannte Abweichungen über
+//           die Industrie korrigiert (REITs → XLRE, Internet-Dienste wie Alphabet/Meta → XLC, Discounter → XLP).
+//           Gilt nur für S&P-500-Aktien – die Mitgliedschaft liefert Pine nicht.
+// @param sec Sektor (`syminfo.sector`).
+// @param ind Industrie (`syminfo.industry`).
+// @returns ETF-Kürzel oder „–“.
+export sectorEtf(string sec, string ind) =>
+    string etf = "–"
+    if str.contains(ind, "Real Estate")
+        etf := "XLRE"
+    else if ind == "Internet Software/Services"
+        etf := "XLC"
+    else if ind == "Food Retail" or ind == "Discount Stores"
+        etf := "XLP"
+    else
+        etf := switch sec
+            "Technology Services"    => "XLK"
+            "Electronic Technology"  => "XLK"
+            "Communications"         => "XLC"
+            "Consumer Services"      => "XLY"
+            "Consumer Durables"      => "XLY"
+            "Retail Trade"           => "XLY"
+            "Consumer Non-Durables"  => "XLP"
+            "Health Technology"      => "XLV"
+            "Health Services"        => "XLV"
+            "Finance"                => "XLF"
+            "Energy Minerals"        => "XLE"
+            "Utilities"              => "XLU"
+            "Non-Energy Minerals"    => "XLB"
+            "Process Industries"     => "XLB"
+            "Producer Manufacturing" => "XLI"
+            "Industrial Services"    => "XLI"
+            "Commercial Services"    => "XLI"
+            "Distribution Services"  => "XLI"
+            "Transportation"         => "XLI"
+            => "–"
+    etf
+
+// ═══════════════════════════════════════════════════════════════════
+// SETUP-ZUSTANDSAUTOMAT
+// Zeigt nur, ob ein Setup besteht und wo Entry (Stop-Order) und SL lägen. Wird der Entry erreicht, endet das
+// Setup – kein Trade-Management. Die Funktion setupStep() verändert den übergebenen Zustand NICHT, sondern gibt
+// eine Kopie zurück: `st := akj.setupStep(st, …)`. So greift das Rollback von TradingView auf laufenden Kerzen.
+// ═══════════════════════════════════════════════════════════════════
+
+// @type Regeln für Setups (Inputs des Indikators) inkl. Puffer-Parameter.
+// @field allowLong   Long-Setups erlaubt.
+// @field allowShort  Short-Setups erlaubt.
+// @field wrLong      Long-Signal: Williams %R Close ≤ dieser Wert.
+// @field wrShort     Short-Signal: Williams %R Close ≥ dieser Wert.
+// @field expiryBars  Setup verfällt nach so vielen Kerzen ab der ersten Signalkerze; 0 = nie.
+// @field tick        Tick-Größe des Symbols (syminfo.mintick).
+// @field bufTicks    Puffer in Ticks bis zur Kurs-Schwelle.
+// @field bufThresh   Kurs-Schwelle; darüber gilt der Promille-Puffer.
+// @field bufPermille Puffer in ‰ vom Kurs oberhalb der Schwelle.
+// @field roundAvoid  Glatte Zahlen meiden an/aus.
+// @field roundStep   Raster für glatte Zahlen.
+export type Rules
+    bool  allowLong   = true
+    bool  allowShort  = true
+    float wrLong      = -80.0
+    float wrShort     = -20.0
+    int   expiryBars  = 0
+    float tick        = 0.01
+    int   bufTicks    = 3
+    float bufThresh   = 100.0
+    float bufPermille = 0.3
+    bool  roundAvoid  = true
+    float roundStep   = 0.5
+
+// @type Zustand des Setups plus die Ereignisse der aktuellen Kerze.
+// @field dir      0 = kein Setup, 1 = Long, -1 = Short.
+// @field startBar Kerzennummer der ersten Signalkerze.
+// @field entry    Entry-Level (Stop-Order); bleibt nach dem Ende des Setups stehen (für die Darstellung).
+// @field sl       Stop-Loss-Level; bleibt nach dem Ende des Setups stehen.
+// @field isNew    Ereignis: Auf dieser Kerze ist ein neues Setup entstanden.
+// @field moved    Ereignis: Auf dieser Kerze wurde der Entry nachgezogen.
+// @field trigDir  Ereignis: Entry auf dieser Kerze erreicht (1 Long, -1 Short), sonst 0.
+export type Setup
+    int   dir      = 0
+    int   startBar
+    float entry
+    float sl
+    bool  isNew    = false
+    bool  moved    = false
+    int   trigDir  = 0
+
+// @function Entry- bzw. SL-Level nach den Regeln (bufLevel mit den Puffer-Parametern aus `r`).
+// @param r     Regeln.
+// @param price Bezugskurs (Hoch bzw. Tief).
+// @param dir   1 = über dem Kurs, -1 = darunter.
+// @returns Level, auf den Tick gerundet.
+export setupLevel(Rules r, float price, int dir) =>
+    bufLevel(price, dir, r.tick, r.bufTicks, r.bufThresh, r.bufPermille, r.roundAvoid, r.roundStep)
+
+// @function Ein Kerzenschritt des Setup-Zustandsautomaten.
+//           1) Offenes Setup: Zuerst Abbruch prüfen – Trigger weg, Sperre, Verfall stehen schon zur Eröffnung
+//              fest. Danach: Entry erreicht (Hoch ≥ Entry bei Long, Tief ≤ Entry bei Short)? Gaps ohne
+//              Berührung zählen nicht. Ist der Close dieser Kerze selbst der Gegentrigger, endet das Setup sofort.
+//           2) Neues Setup (nur abgeschlossene Kerzen): Trigger aktiv, rote (Long) / grüne (Short) Kerze, %R im
+//              Extrembereich. Nachziehen: Solange das Setup offen ist, zieht jeder weitere Downday (Long) bzw.
+//              Upday (Short) den Entry nach – ohne erneute %R-Prüfung. SL: immer unter dem tiefsten Tief (Long)
+//              bzw. über dem höchsten Hoch (Short) seit der ersten Signalkerze; auch Kerzen ohne Signal ziehen ihn
+//              nach, er wandert nie zurück.
+// @param s          Bisheriger Zustand (wird nicht verändert).
+// @param r          Regeln.
+// @param o          Open der Kerze.
+// @param h          Hoch der Kerze.
+// @param l          Tief der Kerze.
+// @param c          Close der Kerze.
+// @param wr         Williams %R der Kerze.
+// @param barIndex   Kerzennummer.
+// @param confirmed  Kerze abgeschlossen (barstate.isconfirmed).
+// @param enabled    Setups in diesem Chart/Zeitraum überhaupt erlaubt (Trade-Chart, Zeitraum).
+// @param longTrend  Trigger Long aktiv (übergeordneter TF und Trade-TF Kauf).
+// @param shortTrend Trigger Short aktiv.
+// @param longNext   Trigger Long auch nach dem Close dieser Kerze.
+// @param shortNext  Trigger Short auch nach dem Close dieser Kerze.
+// @param blocked    Sperre (z. B. Earnings-Sperrfenster): keine neuen Setups, offenes Setup endet.
+// @returns Neuer Zustand (Kopie) inkl. der Ereignisse dieser Kerze.
+export setupStep(Setup s, Rules r, float o, float h, float l, float c, float wr, int barIndex, bool confirmed, bool enabled, bool longTrend, bool shortTrend, bool longNext, bool shortNext, bool blocked) =>
+    n = s.copy()
+    n.isNew   := false
+    n.moved   := false
+    n.trigDir := 0
+    // 1) Offenes Setup: Abbruch oder Entry erreicht?
+    if n.dir != 0
+        trendLost = n.dir == 1 ? not longTrend : not shortTrend
+        if trendLost or blocked or setupExpired(barIndex, n.startBar, r.expiryBars)
+            n.dir := 0
+        else if n.dir == 1 ? h >= n.entry : l <= n.entry
+            n.trigDir := n.dir
+            n.dir     := 0
+    // Close dieser Kerze ist der Gegentrigger: Setup endet sofort, nicht erst auf der Folgekerze.
+    if confirmed and n.dir != 0 and not (n.dir == 1 ? longNext : shortNext)
+        n.dir := 0
+    // 2) Neues Setup oder Nachziehen
+    longSig  = enabled and r.allowLong  and longTrend  and longNext  and c < o and wr <= r.wrLong  and not blocked
+    shortSig = enabled and r.allowShort and shortTrend and shortNext and c > o and wr >= r.wrShort and not blocked
+    moveSig  = n.dir == 1 ? c < o : n.dir == -1 ? c > o : false
+    if confirmed and n.trigDir == 0
+        newDir = n.dir != 0 ? (moveSig ? n.dir : 0) : longSig ? 1 : shortSig ? -1 : 0
+        if newDir != 0
+            barSl = newDir == 1 ? setupLevel(r, l, -1) : setupLevel(r, h, 1)
+            if n.dir == 0
+                n.isNew    := true
+                n.startBar := barIndex
+                n.sl       := barSl
+            else
+                n.moved := true
+                n.sl    := newDir == 1 ? math.min(n.sl, barSl) : math.max(n.sl, barSl)
+            n.dir   := newDir
+            n.entry := newDir == 1 ? setupLevel(r, h, 1) : setupLevel(r, l, -1)
+        else if n.dir != 0
+            // Kerze ohne Signal (Long: grün, Short: rot): Entry bleibt, SL folgt einem neuen Extrem der Bewegung.
+            barSl = n.dir == 1 ? setupLevel(r, l, -1) : setupLevel(r, h, 1)
+            n.sl := n.dir == 1 ? math.min(n.sl, barSl) : math.max(n.sl, barSl)
+    n
+
+// @function Prozentuales Risiko eines Setups: |Entry − SL| / Entry × 100.
+// @param entry Entry-Level.
+// @param sl    Stop-Loss-Level.
+// @returns Risiko in Prozent.
+export riskPct(float entry, float sl) =>
+    math.abs(entry - sl) / entry * 100
+
+// ═══════════════════════════════════════════════════════════════════
+// FUNKTIONEN AUF KERZENSERIEN (Trend, Moving Averages)
+// Brauchen eine Serie als Eingabe (z. B. `close`), laufen also je Kerze – anders als die reinen Funktionen oben.
+// ═══════════════════════════════════════════════════════════════════
+
+// @function Gehaltener Trendzustand auf einer Kerzenserie: 1 = Kauf (2x Close > oberes BB), -1 = Verkauf
+//           (2x Close < unteres BB). Wechselt nur, wenn der Trigger in die Gegenrichtung kommt. Jeder Aufruf
+//           hat seinen eigenen Zustand (auch innerhalb von request.security).
+// @param src  Kursserie (z. B. `close`).
+// @param len  Bollinger-Band-Länge.
+// @param mult Bollinger-Band-Standardabweichung.
+// @returns Zustand nach dem Close der aktuellen Kerze: 1, -1 oder 0 (noch kein Trigger).
+export bbTrendState(series float src, simple int len, simple float mult) =>
+    [mid, up, lo] = ta.bb(src, len, mult)
+    var int state = 0
+    state := trendStep(state, src, src[1], up, up[1], lo, lo[1])
+    state
+
+// @function Moving Average je nach Typ (SMA und EMA werden beide berechnet, damit die ta-Funktionen auf jeder
+//           Kerze laufen).
+// @param src  Kursserie.
+// @param len  Länge.
+// @param kind "EMA" oder sonst SMA.
+// @returns Der gleitende Durchschnitt.
+export maCalc(series float src, simple int len, simple string kind) =>
+    e = ta.ema(src, len)
+    s = ta.sma(src, len)
+    kind == "EMA" ? e : s

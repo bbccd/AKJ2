@@ -206,3 +206,28 @@ flowchart TD
     gelten, obwohl seine Signalkerze vor den Zahlen entstand – ob es nach der Earnings-Reaktion noch
     trägt, ist eigenes Ermessen.
   - Bei Zahlen nach Börsenschluss ist bei vergangenen Terminen auch der Folgetag grau.
+
+## Library und Tests
+
+Die reinen Funktionen der Strategie (Trend-Schritt, Puffer, Entry-/SL-Level) liegen in `akj_lib.pine` – eine
+Pine-Library ohne Zugriff auf Inputs, Kerzenserien oder `syminfo`. Sie wird privat auf TradingView veröffentlicht
+(Pine-Editor → „Skript veröffentlichen“ → „Privat“); jede Änderung ergibt eine neue Version, die Skripte binden
+eine feste Version ein: `import bBccdde/AKJ2/<Version> as akj`.
+
+Tests laufen als eigenes Skript im Chart, weil Pine nicht lokal ausführbar ist:
+
+1. `tests/akj_tests.pine` als Indikator im Pine-Editor anlegen, in der Importzeile Benutzername und Version eintragen.
+2. Zu einem beliebigen Chart hinzufügen. Das Skript benutzt die Chart-Kerzen nicht, sondern erfundene Werte.
+3. Ergebnis: grüne Tabelle „Alle N Tests bestanden“ oder rote Tabelle mit den fehlgeschlagenen Fällen; Fehlschläge
+   stehen zusätzlich in den Pine Logs.
+
+Indikator und Strategie importieren die Library (`import bBccdde/AKJ2/<Version> as akj`) und enthalten selbst nur
+noch Inputs, Abrufe höherer Zeiteinheiten und Darstellung. Nach einer Library-Änderung: neue Version veröffentlichen
+und die Importzeile in allen drei Skripten (Indikator, Strategie, Tests) hochsetzen.
+
+**Regressionstest gegen Chart-Exporte** (`tests/compare_reference.py`): Für Referenz-Symbole liegt je ein
+TradingView-Export (Chart-Menü → „Chart-Daten exportieren“, ISO-Zeit, Daily, Defaults, ADJ aus) in
+`tests/reference/`. Nach einer Änderung denselben Chart erneut exportieren, die Datei nach `tests/current/` legen
+(nicht versioniert) und `python3 tests/compare_reference.py --all` ausführen. Verglichen werden die Plots des
+Indikators Kerze für Kerze bis zur vorletzten Kerze der Referenz; jede Abweichung wird mit Datum gemeldet.
+Der Dateiname aus TradingView („BATS_XLU, 1D_<Hash>.csv“) kann bleiben, der Hash wird ignoriert.
