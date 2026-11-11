@@ -160,10 +160,13 @@ und meldet Fehler zurück.
 - Risiko: 0,5–1 % (normal) bzw. 1–2 % (stark) des max. akzeptierten Depot-Drawdowns pro Trade.
 
 ## Stand / nächste Schritte (Nov. 2026)
-- Zuletzt gemergt: #21 Performance (PR #27), davor D + 4h (#14) und FVG-Filter (#18).
-- Aktuelle Issues immer per `gh issue list -R bbccd/AKJ2` holen (diese Liste kann veralten).
+- Zuletzt gemergt (11.11.2026): PR #32 Performance-Nachtrag (HTF-Abrufe nur bei Bedarf, FVG-Kästen einmal je Kerze,
+  Strategie ein Weekly-Abruf), PR #31 ADJ-Warnung (#26), PR #30 Einstellungen/Style-Reiter, PR #29 Puffer (#24).
+  Davor #21 Performance (PR #27), D + 4h (#14), FVG-Filter (#18). Issue #26 war kein Bug (Dividendenbereinigung je Chart).
+- Aktuelle Issues immer per `gh issue list -R bbccd/AKJ2` holen (diese Liste kann veralten). Stand 11.11.2026 offen:
+  nur die Ideen #16 (relative Stärke) und #17 (Library + Tests).
 - Kandidaten: FVG-Filter in `akj_strategy.pine` übernehmen (Indikator ist getestet); Idee #16 relative Stärke;
-  Idee #17 Library + Tests (siehe „Tests“ oben). Nutzer meldet evtl. noch einen kleinen Bug aus D + 4h als Issue.
+  Idee #17 Library + Tests (siehe „Tests“ oben).
 - Arbeitsweise des Nutzers: kopiert den Code in den Pine-Editor, testet im Chart/Screener und meldet Fehler zurück.
   Änderungen deshalb klein und nachvollziehbar halten und erklären, was zu prüfen ist.
 
