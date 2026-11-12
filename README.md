@@ -78,6 +78,10 @@ TradingView (nur Daily-Chart). Die Setup-Logik kommt wie im Indikator aus der Li
   nicht nötig). Geprüft mit dem Zustand für die nächste Kerze, wie der Trend der Aktie. ETF automatisch aus dem
   TradingView-Sektor (nur USD/S&P 500) oder per Input „Sektor-ETF“. **Ohne bekannten ETF gibt es mit aktivem
   Filter keine Trades** – der Chart zeigt dann eine orange Warnung; ETF eintragen oder Filter abschalten.
+- **FVG-Filter** (Issue #18, Default **aus**): Wie im Indikator – keine Order, solange ein ungefülltes
+  gegenläufiges FVG (Daily, Weekly, Monthly) den Bereich zwischen Entry und Ziel bei CRV 1:1 überlappt. Füllregeln
+  (Issue #36) und Rückschau wie im Indikator einstellbar; FVGs werden nur bei aktivem Filter berechnet. Zur
+  Kontrolle im Datenfenster: „Offene FVGs (Anzahl)“ und „FVG im Gewinnbereich (1 / 0)“.
 - **Kosten:** 1 $ Kommission pro Order, 2 Ticks Slippage – im Reiter „Eigenschaften“ der Strategie änderbar.
   Bar Magnifier ist aktiv (Intraday-Daten für die Reihenfolge innerhalb einer Tageskerze).
 
@@ -195,7 +199,15 @@ flowchart TD
 - **FVG-Filter** (Gruppe „Fair Value Gaps“, Standard **aus**): Ist er an, gilt ein Setup als ungültig, wenn
   ein ungefülltes gegenläufiges Fair Value Gap (Long: bärisch, Short: bullisch) den Bereich zwischen Entry
   und Ziel bei CRV 1:1 auch nur teilweise überlappt. FVG = Lücke über drei Kerzen (bullisch: Tief > Hoch
-  von vor zwei Kerzen, bärisch spiegelbildlich); es zählt, bis der Kurs die Lücke komplett gefüllt hat.
+  von vor zwei Kerzen, bärisch spiegelbildlich; die Lücke entsteht immer aus Hoch und Tief).
+  **Füllregeln** (Issue #36, drei Einstellungen in derselben Gruppe): Standard ist die verbreitete Lesart –
+  nur der Kerzenkörper (Open–Close) der Folgekerzen füllt, und ein FVG gilt erst als geschlossen, wenn der
+  Körper einer Kerze bis zur fernen Kante der Lücke reicht („Komplett abgedeckt“); bis dahin bleibt die Lücke
+  unverändert. Alternativ: „Gefüllt, wenn: Mitte berührt (Consequent Encroachment)“ schließt das FVG schon,
+  wenn die 50-%-Marke der ursprünglichen Lücke erreicht ist; „Teilweise Füllung verkleinert das FVG“ und
+  „Dochte zählen beim Füllen“ stellen das frühere Verhalten wieder her (jede Berührung durch Hoch/Tief
+  verkleinert die Lücke auf den Rest). Einen allgemein gültigen Standard gibt es nicht; die Quellen
+  unterscheiden Docht-Berührung, Close in der Lücke, komplette Abdeckung und die 50-%-Marke.
   Beachtet werden Daily, Weekly und Monthly (in M + W: Weekly und Monthly, in D + 4h zusätzlich 4h),
   je mit eigener Rückschau in
   Kerzen. Wirkung wie beim Risiko-Filter (nicht angezeigt, intern weiter). Zur Kontrolle lassen sich die

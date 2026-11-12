@@ -3,8 +3,8 @@
 // Chart hinzufügen: Das Skript benutzt die Chart-Kerzen nicht, sondern rechnet mit erfundenen Werten und zeigt
 // bestanden / fehlgeschlagen als Tabelle in der Chart-Mitte; Fehlschläge stehen zusätzlich in den Pine Logs.
 // Importzeile: <Benutzername> = TradingView-Benutzername des Veröffentlichers, Zahl = Version der Library.
-indicator("AKJ2.0 – Tests", shorttitle = "AKJ2.0 Tests", overlay = false)
-import bBccdde/AKJ2/5 as akj
+indicator("AKJ2.0 – Tests", shorttitle = "AKJ2 Tests", overlay = false)
+import bBccdde/AKJ2/6 as akj
 
 // ═══════════════════════════════════════════════════════════════════
 // MINI-TESTRAHMEN
@@ -151,27 +151,60 @@ if barstate.islast
     checkI("FVG expire: schon erledigte werden entfernt, nicht gezählt", akj.fvgExpire(qD, 12, 5), 0)
     checkI("FVG expire: erledigtes aus Warteschlange raus",  qD.size(), 1)
 
-    // ── FVG: Füllen ──
+    // ── FVG: Füllen (Issue #36) – Default: nur Schließen bei kompletter Abdeckung, keine Verkleinerung ──
     bullF = array.new<akj.Fvg>()
     akj.fvgInsert(bullF, akj.Fvg.new(105.0, 103.0, 1, 1, 1, 0))
-    checkI("FVG fill: Tief 106 über dem FVG → nichts",        akj.fvgFill(bullF, true, 106.0, 110.0), 0)
-    checkF("FVG fill: top unverändert 105",                  bullF.get(0).top, 105.0)
-    checkI("FVG fill: Tief 104 → teilweise gefüllt (0)",      akj.fvgFill(bullF, true, 104.0, 110.0), 0)
-    checkF("FVG fill: Rest top = 104",                       bullF.get(0).top, 104.0)
-    checkF("FVG fill: Rest bot bleibt 103",                  bullF.get(0).bot, 103.0)
-    checkI("FVG fill: Tief 102 → komplett gefüllt (1)",       akj.fvgFill(bullF, true, 102.0, 110.0), 1)
-    checkI("FVG fill: Liste danach leer",                    bullF.size(), 0)
+    checkI("FVG fill: Tief 106 über dem FVG → nichts",                 akj.fvgFill(bullF, true, 106.0, 110.0, false, false), 0)
+    checkF("FVG fill: top unverändert 105",                           bullF.get(0).top, 105.0)
+    checkI("FVG fill: Tief 104 in der Lücke → nicht geschlossen (0)",  akj.fvgFill(bullF, true, 104.0, 110.0, false, false), 0)
+    checkF("FVG fill: ohne Teilfüllung bleibt top 105",                bullF.get(0).top, 105.0)
+    checkI("FVG fill: Tief 103 erreicht die Unterkante → geschlossen (1)", akj.fvgFill(bullF, true, 103.0, 110.0, false, false), 1)
+    checkI("FVG fill: Liste danach leer",                             bullF.size(), 0)
     bearF = array.new<akj.Fvg>()
     akj.fvgInsert(bearF, akj.Fvg.new(97.0, 95.0, -1, 1, 1, 0))
-    checkI("FVG fill: bärisch, Hoch 96 → teilweise",          akj.fvgFill(bearF, false, 90.0, 96.0), 0)
-    checkF("FVG fill: bärisch Rest bot = 96",                bearF.get(0).bot, 96.0)
-    checkI("FVG fill: bärisch, Hoch 97 → komplett",           akj.fvgFill(bearF, false, 90.0, 97.0), 1)
+    checkI("FVG fill: bärisch, Hoch 96 in der Lücke → nicht geschlossen", akj.fvgFill(bearF, false, 90.0, 96.0, false, false), 0)
+    checkF("FVG fill: bärisch bot bleibt 95",                         bearF.get(0).bot, 95.0)
+    checkI("FVG fill: bärisch, Hoch 97 erreicht die Oberkante → geschlossen", akj.fvgFill(bearF, false, 90.0, 97.0, false, false), 1)
+
+    // ── FVG: Füllen – Mitte berührt (Consequent Encroachment); ohne mid zählt die Mitte des Rests ──
+    bullC = array.new<akj.Fvg>()
+    akj.fvgInsert(bullC, akj.Fvg.new(105.0, 103.0, 1, 1, 1, 0))   // Mitte 104
+    checkI("FVG fill CE: Tief 104,5 über der Mitte → offen",          akj.fvgFill(bullC, true, 104.5, 110.0, false, true), 0)
+    checkI("FVG fill CE: Tief 104 = Mitte → geschlossen",             akj.fvgFill(bullC, true, 104.0, 110.0, false, true), 1)
+    bearC = array.new<akj.Fvg>()
+    akj.fvgInsert(bearC, akj.Fvg.new(97.0, 95.0, -1, 1, 1, 0))    // Mitte 96
+    checkI("FVG fill CE: bärisch, Hoch 95,5 unter der Mitte → offen",  akj.fvgFill(bearC, false, 90.0, 95.5, false, true), 0)
+    checkI("FVG fill CE: bärisch, Hoch 96 = Mitte → geschlossen",     akj.fvgFill(bearC, false, 90.0, 96.0, false, true), 1)
+
+    // ── FVG: Füllen – teilweise Füllung verkleinert den Rest (Verhalten bis v5) ──
+    bullT = array.new<akj.Fvg>()
+    akj.fvgInsert(bullT, akj.Fvg.new(105.0, 103.0, 1, 1, 1, 0))
+    checkI("FVG fill partial: Tief 104 → teilweise gefüllt (0)",      akj.fvgFill(bullT, true, 104.0, 110.0, true, false), 0)
+    checkF("FVG fill partial: Rest top = 104",                       bullT.get(0).top, 104.0)
+    checkF("FVG fill partial: Rest bot bleibt 103",                  bullT.get(0).bot, 103.0)
+    checkI("FVG fill partial: Tief 102 → komplett gefüllt (1)",       akj.fvgFill(bullT, true, 102.0, 110.0, true, false), 1)
+    bearT = array.new<akj.Fvg>()
+    akj.fvgInsert(bearT, akj.Fvg.new(97.0, 95.0, -1, 1, 1, 0))
+    checkI("FVG fill partial: bärisch, Hoch 96 → teilweise",          akj.fvgFill(bearT, false, 90.0, 96.0, true, false), 0)
+    checkF("FVG fill partial: bärisch Rest bot = 96",                bearT.get(0).bot, 96.0)
+    checkI("FVG fill partial: bärisch, Hoch 97 → komplett",           akj.fvgFill(bearT, false, 90.0, 97.0, true, false), 1)
     bullM = array.new<akj.Fvg>()
     akj.fvgInsert(bullM, akj.Fvg.new(105.0, 103.0, 1, 1, 1, 0))
     akj.fvgInsert(bullM, akj.Fvg.new(110.0, 108.0, 1, 1, 2, 0))
-    checkI("FVG fill: Tief 104 füllt das obere komplett, das untere teilweise", akj.fvgFill(bullM, true, 104.0, 112.0), 1)
-    checkI("FVG fill: Liste danach 1",                       bullM.size(), 1)
-    checkF("FVG fill: verbleibender Rest top = 104",         bullM.get(0).top, 104.0)
+    checkI("FVG fill partial: Tief 104 füllt das obere komplett, das untere teilweise", akj.fvgFill(bullM, true, 104.0, 112.0, true, false), 1)
+    checkI("FVG fill partial: Liste danach 1",                       bullM.size(), 1)
+    checkF("FVG fill partial: verbleibender Rest top = 104",         bullM.get(0).top, 104.0)
+
+    // ── FVG: Teilfüllung + Mitte – es zählt die Mitte der URSPRÜNGLICHEN Lücke (mid aus fvgAdd) ──
+    bullY = array.new<akj.Fvg>()
+    bearY = array.new<akj.Fvg>()
+    qY    = array.new<akj.Fvg>()
+    akj.fvgAdd(bullY, bearY, qY, 1, 108.0, 105.0, 103.0, 101.0, 1000, 10)   // bullisch 103–105, Mitte 104
+    checkF("FVG add: mid = Mitte der Lücke 104",                     bullY.get(0).mid, 104.0)
+    checkI("FVG fill partial+CE: Tief 104,6 → verkleinert, offen",    akj.fvgFill(bullY, true, 104.6, 110.0, true, true), 0)
+    checkF("FVG fill partial+CE: Rest top = 104,6",                  bullY.get(0).top, 104.6)
+    checkI("FVG fill partial+CE: Tief 104,2 → Mitte 104 noch nicht erreicht", akj.fvgFill(bullY, true, 104.2, 110.0, true, true), 0)
+    checkI("FVG fill partial+CE: Tief 104 → geschlossen",            akj.fvgFill(bullY, true, 104.0, 110.0, true, true), 1)
 
     // ── FVG: Aufräumen ──
     lstC = array.new<akj.Fvg>()

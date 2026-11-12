@@ -3,7 +3,7 @@ strategy("AKJ2.0 – Strategie (Backtest)", shorttitle = "AKJ2.0 S", overlay = t
 
 // Backtest-Version des Indikators akj_setup_indikator.pine (nur Daily-Chart).
 // Setup-Logik kommt aus der Library akj_lib.pine (wie im Indikator) – Regeländerungen dort, Tests in tests/akj_tests.pine.
-import bBccdde/AKJ2/5 as akj
+import bBccdde/AKJ2/6 as akj
 // Kommission (Default 1 $/Order) und Slippage (Default 2 Ticks) im Reiter „Eigenschaften“ einstellbar.
 // Einschränkung: Die Earnings-Sperre wirkt nur für den nächsten Termin – im Backtest greift sie für
 // vergangene Earnings NICHT (TradingView liefert vergangene Termine nicht im Voraus).
