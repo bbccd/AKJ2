@@ -78,7 +78,7 @@ und meldet Fehler zurück.
   (chart.left_visible_bar_time) – auf Nutzerwunsch aufgegeben (Issue #21): chart.left/right_visible_* zwingt
   TradingView zur kompletten Neuberechnung bei jedem Scrollen/Zoomen. NICHT wieder verwenden.
   Tabelle oben Mitte (unten überlappte Volumen; unsichtbare Abstandszeile „Abstand von oben“ Default 6 %,
-  damit sie unter der Statuszeile steht): Sektor (syminfo.sector) | Industrie (syminfo.industry) | „(evtl. XLY)“ – Sektor-ETF ist
+  damit sie unter der Statuszeile steht): Sektor (syminfo.sector) | Industrie (syminfo.industry) | „(evtl. XLY)“ | Sektor-Trend „XLY  W ▲  D ▲“ (Issue #16) – Sektor-ETF ist
   eigenes Mapping TradingView-Sektor → SPDR XL* (Näherung, nicht gegen ETF-Bestände geprüft, nur USD-Aktien);
   Select Sector SPDRs enthalten nur S&P-500-Aktien, Mitgliedschaft unbekannt → bewusst vorsichtig formuliert. Börsen-Spalte entfernt: syminfo.prefix = Datenquelle (bei Nutzer „BATS“),
   nicht Heimatbörse. Index-Mitgliedschaft nicht in Pine; Listen im Code vom Nutzer verworfen (zu groß).
@@ -172,6 +172,13 @@ und meldet Fehler zurück.
   Kontroll-Kästen. FVGs werden immer berechnet (auch Filter aus), damit die Screener-Spalte „FVG im
   Gewinnbereich (1 / 0)“ unabhängig vom Filter gefüllt ist. Strategie noch NICHT synchronisiert (erst nach Test im Indikator).
 - Risiko: 0,5–1 % (normal) bzw. 1–2 % (stark) des max. akzeptierten Depot-Drawdowns pro Trade.
+- Sektor-Trend (Issue #16, Nutzer-Regel, nicht im Guide): Trend des Sektor-ETF (akj.sectorEtf oder Input „Sektor-ETF“,
+  auch Index möglich) in den beiden Zeiteinheiten der Spielweise, gleiche Trigger-Regel wie die Aktie, aus
+  abgeschlossenen Kerzen. Indikator: NUR Anzeige (Sektor-Tabelle 4. Spalte, Status-Tabelle, Setup-Label) plus
+  Screener-Plot „Sektor-Trend (1 / -1 / 0)“; zwei zusätzliche Abrufe, abschaltbar. Strategie: Filter, Default AN –
+  Order nur, wenn ETF-Trend für die nächste Kerze (W am Freitag aus der laufenden Woche, D nach dem Close) der
+  Setup-Richtung entspricht; ohne bekannten ETF keine Trades + orange Warnung. Setup-Zustand bleibt unabhängig
+  (nur Orders gefiltert). Logik bewusst (noch) nicht in der Library – wenige Zeilen, nächste Version bündeln.
 
 ## Stand / nächste Schritte (Nov. 2026)
 - Zuletzt gemergt (11.11.2026): PR #32 Performance-Nachtrag (HTF-Abrufe nur bei Bedarf, FVG-Kästen einmal je Kerze,

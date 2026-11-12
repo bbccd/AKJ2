@@ -14,13 +14,13 @@ import bBccdde/AKJ2/5 as akj
 G_TREND = "Regeln – Trend"
 bbLen     = input.int(10, "BB Länge", minval = 1, group = G_TREND)
 bbMult    = input.float(1.0, "BB Standardabweichung", minval = 0.1, step = 0.1, group = G_TREND)
+wrLen      = input.int(4, "Williams %R Länge", minval = 1, group = G_TREND)   // Basis-Indikatoren (BB, %R) wie bei den TradingView-Standards beisammen
+wrLongLvl  = input.float(-80.0, "%R Long: Close ≤", group = G_TREND)
+wrShortLvl = input.float(-20.0, "%R Short: Close ≥", group = G_TREND)
 
 G_SETUP = "Regeln – Setup & Entry"
 enableLong  = input.bool(true, "Long-Setups", group = G_SETUP)
 enableShort = input.bool(true, "Short-Setups", group = G_SETUP)
-wrLen       = input.int(4, "Williams %R Länge", minval = 1, group = G_SETUP)
-wrLongLvl   = input.float(-80.0, "%R Long: Close ≤", group = G_SETUP)
-wrShortLvl  = input.float(-20.0, "%R Short: Close ≥", group = G_SETUP)
 // Puffer (Issue #24, Handelsplan): bis zur Kurs-Schwelle fest X Ticks, darüber Y ‰ vom Kurs, auf den Tick aufgerundet.
 bufTicks    = input.int(3, "Puffer: Ticks / Schwelle (Kurs) / ‰ darüber", minval = 0, group = G_SETUP, inline = "buf", tooltip = "Entry und Stop-Loss liegen je einen Puffer jenseits von Hoch bzw. Tief der Signalkerze. Bis zur Schwelle (Kurs): fester Puffer in Ticks. Darüber: Promille vom Kurs, auf den nächsten Tick aufgerundet (0,3 ‰: 500 $ → 0,15 $).")
 bufThresh   = input.float(100.0, "", minval = 0.0, step = 10.0, group = G_SETUP, inline = "buf")
@@ -35,6 +35,10 @@ riskMax     = input.float(7.0, "", minval = 0.0, step = 0.1, group = G_SETUP, in
 G_EARN = "Regeln – Earnings"
 hideNearEarn = input.bool(true, "Keine Orders im Sperrfenster", group = G_EARN, tooltip = "Greift nur für den nächsten Earnings-Termin, nicht für vergangene (Backtest).")
 earnDays     = input.int(8, "Sperrfenster (Kalendertage vor Earnings)", minval = 0, maxval = 21, group = G_EARN)
+
+G_SEC = "Regeln – Sektor"
+secFilter   = input.bool(true, "Nur handeln, wenn der Sektor-ETF im gleichen Trend ist (W und D)", group = G_SEC, tooltip = "Issue #16: Long nur, wenn der Sektor-ETF im Weekly UND Daily auf Kauf steht (2x Close über dem oberen BB, bis zum Gegentrigger); Short spiegelbildlich. Ein Setup des ETF ist nicht nötig. Geprüft mit dem Zustand für die nächste Kerze (wie der Trend der Aktie). Ohne bekannten Sektor-ETF werden mit aktivem Filter KEINE Trades eingegangen – dann unten „Sektor-ETF“ eintragen oder Filter aus.")
+secOverride = input.symbol("", "Sektor-ETF (leer = automatisch aus dem TradingView-Sektor)", group = G_SEC, tooltip = "Leer: Select Sector SPDR aus dem TradingView-Sektor (Näherung, nur USD-Aktien). Hier kann ein anderer ETF oder Index eingetragen werden, z. B. SPY.")
 
 G_BT = "Positionsgröße & Ausstieg"
 maxDD        = input.float(2000.0, "Max. Drawdown ($)", minval = 1.0, step = 100.0, group = G_BT, tooltip = "Maximal akzeptierter Drawdown des Depots.")
@@ -73,6 +77,32 @@ shortTrend  = isDaily and weeklyState == -1 and dailyState == -1
 weeklyNext  = dayofweek == dayofweek.friday ? wStateNow : weeklyState
 longNext    = isDaily and weeklyNext == 1  and dailyNext == 1
 shortNext   = isDaily and weeklyNext == -1 and dailyNext == -1
+
+// ═══════════════════════════════════════════════════════════════════
+// SEKTOR-TREND (Issue #16): Weekly- und Daily-Trend des Sektor-ETF, wie bei der Aktie für die NÄCHSTE Kerze
+// (Daily nach dem heutigen Close, Weekly am Freitag der endenden Woche). Zwei Abrufe, nur bei aktivem Filter.
+// ═══════════════════════════════════════════════════════════════════
+// nz() gibt es nur für Zahlen – fehlende Sektor-/Industrie-Angaben (na) per Prüfung ersetzen.
+secAuto = syminfo.currency == "USD" ? akj.sectorEtf(na(syminfo.sector) ? "" : syminfo.sector, na(syminfo.industry) ? "" : syminfo.industry) : "–"
+secSym  = secOverride != "" ? secOverride : secAuto == "–" ? "" : secAuto
+secName = secSym == "" ? "–" : str.contains(secSym, ":") ? array.last(str.split(secSym, ":")) : secSym
+secData() =>
+    s = akj.bbTrendState(close, bbLen, bbMult)
+    [s[1], s]
+// need muss simple sein (sonst Warnung „should be called on each calculation“) – secSym kommt aus der Library und ist
+// deshalb series. Darum entscheidet nur der Schalter; ohne bekannten ETF wird das eigene Symbol abgefragt (Ergebnis ungenutzt).
+secReq(simple bool need, string sym, simple string tf) =>
+    if need
+        request.security(sym, tf, secData(), lookahead = barmerge.lookahead_on)
+    else
+        [int(na), int(na)]
+secOn    = secFilter and secSym != ""
+secReqSym = secSym == "" ? syminfo.tickerid : secSym
+[secW1, secW0] = secReq(secFilter, secReqSym, "W")
+[secD1, secD0] = secReq(secFilter, secReqSym, "D")
+secWNext = dayofweek == dayofweek.friday ? secW0 : secW1
+secNext  = not secOn ? 0 : secWNext == 1 and secD0 == 1 ? 1 : secWNext == -1 and secD0 == -1 ? -1 : 0   // für die nächste Kerze
+secTrend = not secOn ? int(na) : secW1 == 1 and secD1 == 1 ? 1 : secW1 == -1 and secD1 == -1 ? -1 : 0  // auf dieser Kerze (Anzeige)
 
 // ═══════════════════════════════════════════════════════════════════
 // EARNINGS (nur nächster Termin bekannt)
@@ -125,7 +155,8 @@ if posDir == 0
     expiryNext = setupDir != 0 and akj.setupExpired(bar_index + 1, setupStart, expiryBars)
     trendNext  = setupDir == 1 ? longNext : setupDir == -1 ? shortNext : false
     qty        = setupDir != 0 ? math.floor(riskAmt / math.abs(entryLvl - slLvl)) : 0
-    orderOk    = setupDir != 0 and riskOk and trendNext and not earnBlockNext and not expiryNext and qty >= 1
+    secOk      = not secFilter or secNext == setupDir   // Sektor-Filter (Issue #16); ohne ETF: secNext = 0 → keine Orders
+    orderOk    = setupDir != 0 and riskOk and trendNext and not earnBlockNext and not expiryNext and secOk and qty >= 1
     if orderOk
         id      = setupDir == 1 ? ID_L : ID_S
         trSl    := slLvl
@@ -153,6 +184,13 @@ else if trTrail
 // DARSTELLUNG (schlank – Details liefert der Strategietester)
 // ═══════════════════════════════════════════════════════════════════
 plot(basis, "BB Mid", color.new(color.gray, 20), 1)
+plot(secTrend, "Sektor-Trend (1 / -1 / 0)", display = display.data_window, editable = false)
+// Hinweis, wenn der Sektor-Filter aktiv ist, aber kein Sektor-ETF bekannt – dann gibt es keine Trades.
+var table secTbl = table.new(position.middle_center, 1, 1, bgcolor = #E65100, frame_color = #E65100, frame_width = 4, border_width = 0)
+if barstate.islast
+    table.clear(secTbl, 0, 0)
+    if secFilter and secSym == ""
+        table.cell(secTbl, 0, 0, "⚠ Sektor-Filter aktiv, aber kein Sektor-ETF bekannt – keine Trades.\nETF im Input „Sektor-ETF“ eintragen oder Filter abschalten.", text_color = color.white, text_size = size.large, text_formatting = text.format_bold)
 plot(posDir == 0 and setupDir != 0 and riskOk ? entryLvl : na, "Entry-Order", color.blue, 2, plot.style_linebr)
 plot(posDir != 0 ? trSl : na, "Stop", color.red, 1, plot.style_linebr)
 plot(posDir != 0 and not trTp1Hit ? trTp1 : na, "Ziel CRV 1:1", color.green, 1, plot.style_linebr)
