@@ -26,7 +26,9 @@ und meldet Fehler zurück.
   Funktionen (alle Eingaben als Parameter, kein Zugriff auf Inputs/Serien/syminfo; `// @function/@param/@returns`
   dokumentieren). Nutzer veröffentlicht sie PRIVAT auf TradingView; jede Änderung = neue Version, Einbinden per
   `import bBccdde/AKJ2/<Version> as akj` (TradingView-Benutzername bBccdde). `tests/akj_tests.pine` importiert die Library und prüft sie mit
-  erfundenen Werten (Tabelle im Chart); Benutzername/Version in der Importzeile vom Nutzer einzutragen. Reihenfolge
+  erfundenen Werten (Tabelle im Chart); Benutzername/Version in der Importzeile vom Nutzer einzutragen. Aufbau (Nov. 2026):
+  je Bereich eine Funktion test…() mit beginGroup("Name") in Library-Reihenfolge, lokale Variablen (keine
+  Namenskollisionen mehr), Bauhelfer fvgNone/fvgOne/fvgDead, Ergebnis je Bereich in der Tabelle; 253 Tests. Reihenfolge
   (vom Nutzer vorgegeben): 1. Library erstellen/veröffentlichen, 2. Tests dagegen schreiben, 3. erst bei guter
   Abdeckung die Kopien aus Indikator und Strategie entfernen und importieren – seit v5 umgesetzt: beide Skripte
   importieren die Library; Regeländerungen gehören in die Library (neue Version, Importzeile in Indikator, Strategie
