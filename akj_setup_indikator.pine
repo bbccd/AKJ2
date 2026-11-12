@@ -18,13 +18,13 @@ G_PLAY = "Regeln – Spielweise & Trend"
 playMode  = input.string("W + D", "Spielweise", options = ["W + D", "M + W", "D + 4h"], group = G_PLAY, tooltip = "W + D: Weekly übergeordnet, Trade im Daily-Chart (Weekly-Chart zeigt nur den Weekly-Trigger). M + W: Monthly übergeordnet, Trade im Weekly-Chart. D + 4h: Daily übergeordnet, Trade im 4h-Chart (Daily- und Weekly-Chart zeigen nur ihren Trigger; 4h-Chart mit regulären Handelszeiten verwenden). Das Monthly-Chart zeigt immer den Monthly-Trigger. Für mehrere Spielweisen im selben Chart den Indikator mehrfach hinzufügen.")
 bbLen     = input.int(10, "BB Länge", minval = 1, group = G_PLAY)
 bbMult    = input.float(1.0, "BB Standardabweichung", minval = 0.1, step = 0.1, group = G_PLAY)
+wrLen      = input.int(4, "Williams %R Länge", minval = 1, group = G_PLAY)   // Basis-Indikatoren (BB, %R) wie bei den TradingView-Standards beisammen
+wrLongLvl  = input.float(-80.0, "%R Long: Close ≤", group = G_PLAY)
+wrShortLvl = input.float(-20.0, "%R Short: Close ≥", group = G_PLAY)
 
 G_SETUP = "Regeln – Setup & Entry"
 enableLong  = input.bool(true, "Long-Setups", group = G_SETUP)
 enableShort = input.bool(true, "Short-Setups", group = G_SETUP)
-wrLen       = input.int(4, "Williams %R Länge", minval = 1, group = G_SETUP)
-wrLongLvl   = input.float(-80.0, "%R Long: Close ≤", group = G_SETUP)
-wrShortLvl  = input.float(-20.0, "%R Short: Close ≥", group = G_SETUP)
 // Puffer (Issue #24, Handelsplan): bis zur Kurs-Schwelle fest X Ticks, darüber Y ‰ vom Kurs, auf den Tick aufgerundet.
 bufTicks    = input.int(3, "Puffer: Ticks / Schwelle (Kurs) / ‰ darüber", minval = 0, group = G_SETUP, inline = "buf", tooltip = "Entry und Stop-Loss liegen je einen Puffer jenseits von Hoch bzw. Tief der Signalkerze. Bis zur Schwelle (Kurs): fester Puffer in Ticks. Darüber: Promille vom Kurs, auf den nächsten Tick aufgerundet (0,3 ‰: 500 $ → 0,15 $).")
 bufThresh   = input.float(100.0, "", minval = 0.0, step = 10.0, group = G_SETUP, inline = "buf")
