@@ -618,12 +618,13 @@ isAdjusted = str.contains(syminfo.tickerid, "adjustment")
 // auch vom Trigger-Hintergrund abhebt.
 ADJ_BG  = #E65100
 ADJ_TIP = "Dieser Chart verwendet dividendenbereinigte Kurse (Schalter „ADJ“ unten rechts, gilt je Chart). Bollinger-Band und Trend werden damit berechnet und können von Charts ohne Bereinigung abweichen. Alle Charts gleich einstellen. Warnung abschaltbar: „Anzeige – Zusatzinfos“."
-var table adjTbl = table.new(position.middle_center, 2, 1, bgcolor = ADJ_BG, frame_color = ADJ_BG, frame_width = 4, border_width = 0)
-if barstate.islast
-    table.clear(adjTbl, 0, 0, 1, 0)
-    if adjWarn and isAdjusted
-        table.cell(adjTbl, 0, 0, "⚠", text_color = color.white, text_size = size.huge, text_formatting = text.format_bold, tooltip = ADJ_TIP)
-        table.cell(adjTbl, 1, 0, "Dividendenbereinigt (ADJ)\nTrend kann abweichen", text_color = color.white, text_size = size.large, text_halign = text.align_left, text_formatting = text.format_bold, tooltip = ADJ_TIP)
+// Tabelle nur anlegen, wenn die Warnung gilt: Eine leere Tabelle mit Hintergrund und Rahmen bleibt sonst als kleines
+// farbiges Kästchen in der Chart-Mitte stehen. Die Bedingung hängt nur von Symbol und Inputs ab → einmal auf der
+// ersten Kerze füllen (Tabellen bleiben bestehen; kein Neuzeichnen bei jedem Tick).
+var table adjTbl = adjWarn and isAdjusted ? table.new(position.middle_center, 2, 1, bgcolor = ADJ_BG, frame_color = ADJ_BG, frame_width = 4, border_width = 0) : table(na)
+if barstate.isfirst and not na(adjTbl)
+    table.cell(adjTbl, 0, 0, "⚠", text_color = color.white, text_size = size.huge, text_formatting = text.format_bold, tooltip = ADJ_TIP)
+    table.cell(adjTbl, 1, 0, "Dividendenbereinigt (ADJ)\nTrend kann abweichen", text_color = color.white, text_size = size.large, text_halign = text.align_left, text_formatting = text.format_bold, tooltip = ADJ_TIP)
 
 // ═══════════════════════════════════════════════════════════════════
 // STATUS-TABELLE

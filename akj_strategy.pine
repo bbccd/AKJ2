@@ -253,9 +253,10 @@ plot(fvgOn ? fvgAlive : na, "Offene FVGs (Anzahl)", display = display.data_windo
 plot(fvgOn and setupDir != 0 ? (fvgInZone ? 1 : 0) : na, "FVG im Gewinnbereich (1 / 0)", display = display.data_window, editable = false)
 // Hinweis, wenn der Sektor-Filter aktiv ist, aber kein Sektor-ETF bekannt – dann gibt es keine Trades.
 // Die Bedingung hängt nur von Symbol und Inputs ab, daher einmal auf der ersten Kerze zeichnen (kein barstate.islast:
-// Strategien ohne calc_on_every_tick warnen davor, Tabellen bleiben ohnehin bestehen).
-var table secTbl = table.new(position.middle_center, 1, 1, bgcolor = #E65100, frame_color = #E65100, frame_width = 4, border_width = 0)
-if barstate.isfirst and secFilter and secSym == ""
+// Strategien ohne calc_on_every_tick warnen davor, Tabellen bleiben ohnehin bestehen). Tabelle nur anlegen, wenn
+// die Warnung gilt – eine leere Tabelle mit Hintergrund und Rahmen bliebe als kleines Kästchen in der Chart-Mitte.
+var table secTbl = secFilter and secSym == "" ? table.new(position.middle_center, 1, 1, bgcolor = #E65100, frame_color = #E65100, frame_width = 4, border_width = 0) : table(na)
+if barstate.isfirst and not na(secTbl)
     table.cell(secTbl, 0, 0, "⚠ Sektor-Filter aktiv, aber kein Sektor-ETF bekannt – keine Trades.\nETF im Input „Sektor-ETF“ eintragen oder Filter abschalten.", text_color = color.white, text_size = size.large, text_formatting = text.format_bold)
 plot(posDir == 0 and setupDir != 0 and riskOk and fvgOk ? entryLvl : na, "Entry-Order", color.blue, 2, plot.style_linebr)
 plot(posDir != 0 ? trSl : na, "Stop", color.red, 1, plot.style_linebr)
