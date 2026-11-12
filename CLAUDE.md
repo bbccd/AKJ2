@@ -190,13 +190,22 @@ und meldet Fehler zurück.
   (nur Orders gefiltert). Logik bewusst (noch) nicht in der Library – wenige Zeilen, nächste Version bündeln.
 
 ## Stand / nächste Schritte (Nov. 2026)
-- Zuletzt gemergt (12.11.2026): PR #35 Sektor-Trend (#16) + %R-Inputs zu den BB. Davor (11.11.): PR #34 Library-
+- Zuletzt gemergt (12.11.2026): PR #37 FVG-Füllregeln (#36, Library v6) + FVG-Filter in der Strategie (#18).
+  Davor am selben Tag PR #35 Sektor-Trend (#16) + %R-Inputs zu den BB. Davor (11.11.): PR #34 Library-
   Umstellung (#17), PR #32 Performance-Nachtrag (HTF-Abrufe nur bei Bedarf, FVG-Kästen einmal je Kerze,
   Strategie ein Weekly-Abruf), PR #31 ADJ-Warnung (#26), PR #30 Einstellungen/Style-Reiter, PR #29 Puffer (#24).
   Davor #21 Performance (PR #27), D + 4h (#14), FVG-Filter (#18). Issue #26 war kein Bug (Dividendenbereinigung je Chart).
-- Aktuelle Issues immer per `gh issue list -R bbccd/AKJ2` holen (diese Liste kann veralten). Stand 12.11.2026 offen:
-  nur #36 (FVG-Füllregeln, in Arbeit auf feature/36-fvg-fill).
-- Kandidaten: Sektor-Logik in die Library (mit der nächsten Version bündeln).
+- Aktuelle Issues immer per `gh issue list -R bbccd/AKJ2` holen (diese Liste kann veralten). Stand 12.11.2026:
+  keine offenen Issues. Der Nutzer testet den Indikator (Stand PR #37) ausführlich; Bugs kommen als Issues.
+- Vorgeschlagene nächste Schritte (Reihenfolge nach Nutzen, nichts davon dringend):
+  1. Regressions-Referenzen neu exportieren (`tests/reference/`, XLU/EBAY/AAPL Daily, Defaults, ADJ aus), damit
+     der Vergleich wieder mit den Defaults läuft (seit #36 nur noch mit den alten Füll-Einstellungen, siehe oben).
+  2. Sektor-Logik (secTrend/secNext aus Indikator und Strategie) in die Library – als Library v7 bündeln mit der
+     nächsten Regeländerung, nicht allein (jede Version = Importzeile in drei Skripten hochsetzen).
+  3. Backtest mit FVG-Filter an/aus über mehrere Aktien vergleichen (wie beim Sektor-Filter: Max. Drawdown und
+     Trefferquote, nicht nur Nettogewinn) – entscheidet, ob der Default in der Strategie auf „an“ wechselt.
+  4. Earnings im Backtest (vergangene Termine) bleibt ungelöst – Pine liefert sie nicht im Voraus; nur erneut
+     prüfen, falls TradingView `request.earnings` mit Zeitpunkt der Ankündigung anbietet.
 - Arbeitsweise des Nutzers: kopiert den Code in den Pine-Editor, testet im Chart/Screener und meldet Fehler zurück.
   Änderungen deshalb klein und nachvollziehbar halten und erklären, was zu prüfen ist.
 
