@@ -242,8 +242,12 @@ Tests laufen als eigenes Skript im Chart, weil Pine nicht lokal ausführbar ist:
 
 1. `tests/akj_tests.pine` als Indikator im Pine-Editor anlegen, in der Importzeile Benutzername und Version eintragen.
 2. Zu einem beliebigen Chart hinzufügen. Das Skript benutzt die Chart-Kerzen nicht, sondern erfundene Werte.
-3. Ergebnis: grüne Tabelle „Alle N Tests bestanden“ oder rote Tabelle mit den fehlgeschlagenen Fällen; Fehlschläge
-   stehen zusätzlich in den Pine Logs.
+3. Ergebnis: Tabelle oben in der Mitte des Charts – gesamt (grün „Alle Tests bestanden“ bzw. rot), darunter je
+   Bereich (Trend, Puffer, FVG …, Setup …) bestanden/gesamt in drei Spalten. Fehlschläge mit erwartetem und
+   erhaltenem Wert erscheinen in einer roten Tabelle in der Chart-Mitte und zusätzlich in den Pine Logs.
+
+Aufbau der Testdatei: Jeder Bereich ist eine eigene Funktion `test…()` in der Reihenfolge der Library; neue Tests
+in den passenden Bereich schreiben, ein neuer Bereich wird unten im Testlauf aufgerufen.
 
 Indikator und Strategie importieren die Library (`import bBccdde/AKJ2/<Version> as akj`) und enthalten selbst nur
 noch Inputs, Abrufe höherer Zeiteinheiten und Darstellung. Nach einer Library-Änderung: neue Version veröffentlichen
