@@ -2,7 +2,7 @@
 indicator("AKJ2.0 – Trend & Setup Detector", shorttitle = "AKJ2.0", overlay = true, max_labels_count = 500, max_boxes_count = 500)
 // Logik (Trend, Puffer, Setup-Zustandsautomat, FVGs, Earnings-Kalender, Sektor-ETF) liegt in der Library akj_lib.pine
 // (privat veröffentlicht, Tests in tests/akj_tests.pine). Dieses Skript enthält nur Inputs, Abrufe und Darstellung.
-import bBccdde/AKJ2/5 as akj
+import bBccdde/AKJ2/6 as akj
 
 // Zweck: Aktien schnell auf mögliche Setups scannen. Bewusst kein Trade-Management und
 // keine Entry-/Exit-Marker – das kommt später in die strategy()-Version.
@@ -53,6 +53,11 @@ earnLineW    = input.int(3, "", minval = 1, maxval = 6, group = G_EARN, inline =
 // Fair Value Gaps (Issue #18): Default AUS – ausgeschaltet verhält sich der Indikator exakt wie vorher.
 G_FVG = "Regeln – Fair Value Gaps"
 fvgFilter = input.bool(false, "FVG-Filter: kein Setup bei FVG im Gewinnbereich", group = G_FVG, tooltip = "Setup gilt als ungültig, wenn ein ungefülltes gegenläufiges FVG (Long: bärisch, Short: bullisch) den Bereich zwischen Entry und Ziel bei CRV 1:1 auch nur teilweise überlappt. Wirkt wie der Risiko-Filter: Setup wird nicht angezeigt (Linien, Marker, Hervorhebung, Alerts, Screener), läuft intern weiter. FVG = Lücke über drei Kerzen; zählt, bis sie komplett gefüllt ist.")
+// Füllregeln (Issue #36): Default = verbreitete Lesart (nur Kerzenkörper, geschlossen erst bei kompletter Abdeckung).
+// Das frühere Verhalten (Dochte zählen, teilweise Füllung verkleinert) bleibt per Einstellung möglich.
+fvgFillMode = input.string("Komplett abgedeckt", "Gefüllt, wenn", options = ["Komplett abgedeckt", "Mitte berührt (Consequent Encroachment)"], group = G_FVG, tooltip = "Wann gilt ein FVG als geschlossen? Komplett abgedeckt: Der Füllbereich einer Folgekerze reicht bis zur fernen Kante der Lücke (bullisch: bis zur Unterkante). Mitte berührt: Es genügt, wenn der Füllbereich die 50-%-Marke der ursprünglichen Lücke erreicht (ICT „Consequent Encroachment“).")
+fvgPartial  = input.bool(false, "Teilweise Füllung verkleinert das FVG", group = G_FVG, tooltip = "An: Jede Folgekerze, die in die Lücke hineinreicht, verkleinert sie auf den ungefüllten Rest (früheres Verhalten). Aus: Die Lücke bleibt unverändert, bis sie nach der Regel oben geschlossen ist (üblich).")
+fvgWicks    = input.bool(false, "Dochte zählen beim Füllen (sonst nur der Kerzenkörper)", group = G_FVG, tooltip = "An: Hoch und Tief der Folgekerzen füllen (früheres Verhalten). Aus: Nur der Bereich zwischen Open und Close füllt (üblich). Die Lücke selbst entsteht immer aus Hoch und Tief der ersten und dritten Kerze.")
 fvgUse4h  = input.bool(true, "4h (Rückschau in Kerzen)", group = G_FVG, inline = "fvg4h", tooltip = "Nur in der Spielweise D + 4h (Trade im 4h-Chart).")
 fvgLb4h   = input.int(1000, "", minval = 1, maxval = 5000, group = G_FVG, inline = "fvg4h")
 fvgUseD   = input.bool(true, "Daily (Rückschau in Kerzen)", group = G_FVG, inline = "fvgD", tooltip = "Nur in den Spielweisen W + D und D + 4h. In M + W werden nur Weekly und Monthly beachtet.")
@@ -331,9 +336,13 @@ if fvgOn and barstate.isconfirmed
     fvgAlive -= akj.fvgExpire(fvgQD, chartTfId == 1 ? bar_index : dCnt, fvgLbD)
     fvgAlive -= akj.fvgExpire(fvgQW, chartTfId == 2 ? bar_index : wCnt, fvgLbW)
     fvgAlive -= akj.fvgExpire(fvgQM, mCnt, fvgLbM)
-    // 3) Komplett gefüllt → erledigt; teilweise gefüllt → Rest verkleinern (nur die vorderen FVGs betroffen)
-    fvgAlive -= akj.fvgFill(fvgBull, true, low, high)
-    fvgAlive -= akj.fvgFill(fvgBear, false, low, high)
+    // 3) Füllen nach den Regeln aus den Einstellungen (Issue #36): Füllbereich = Kerzenkörper oder ganze Kerze;
+    //    geschlossen bei kompletter Abdeckung oder Berührung der Mitte; optional Rest verkleinern.
+    fillLo = fvgWicks ? low : math.min(open, close)
+    fillHi = fvgWicks ? high : math.max(open, close)
+    fvgCe  = fvgFillMode != "Komplett abgedeckt"
+    fvgAlive -= akj.fvgFill(fvgBull, true, fillLo, fillHi, fvgPartial, fvgCe)
+    fvgAlive -= akj.fvgFill(fvgBear, false, fillLo, fillHi, fvgPartial, fvgCe)
     // 4) Neues FVG im Chart-TF (diese Kerze ist die jüngste der drei)
     chartUse = chartTfId == 0 ? fvgUse4h : chartTfId == 1 ? fvgUseD : fvgUseW
     chartQ   = chartTfId == 0 ? fvgQ4h : chartTfId == 1 ? fvgQD : fvgQW

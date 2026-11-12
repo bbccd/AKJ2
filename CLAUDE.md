@@ -32,12 +32,15 @@ und meldet Fehler zurück.
   importieren die Library; Regeländerungen gehören in die Library (neue Version, Importzeile in Indikator, Strategie
   und Tests hochsetzen). Library-Inhalt:
   Setup-Zustandsautomat, FVG-Funktionen (seit v4), bbTrendState/maCalc auf Serien (v5; Tests mit synthetischer
-  Serie aus bar_index). Damit ist die gesamte Logik in der Library – nächster Schritt: Indikator und Strategie
+  Serie aus bar_index), fvgFill mit Füllregeln partial/ce + Feld Fvg.mid (v6, Issue #36). Damit ist die gesamte Logik in der Library – nächster Schritt: Indikator und Strategie
   umschalten – erledigt auf feature/library (Regressionstest mit tests/compare_reference.py vorher/nachher).
 - Regressionstest (`tests/compare_reference.py`): TradingView-Exporte in `tests/reference/` (Daily, Defaults, ADJ
   aus) sind die Referenz; neue Exporte nach `tests/current/` (gitignored), `--all` vergleicht die Indikator-Plots
   Kerze für Kerze (Liste COLUMNS im Skript; „Tage bis Earnings“ bewusst nicht). Der Export enthält auch die
   Datenfenster-Plots (geprüft). Pflicht vor/nach dem Umschalten von Indikator und Strategie auf die Library.
+  ACHTUNG: Die Referenzen stammen von VOR Issue #36 (alte FVG-Füllregeln). Für einen Vergleich im Indikator
+  einstellen: „Dochte zählen“ an, „Teilweise Füllung verkleinert“ an, „Gefüllt, wenn: Komplett abgedeckt“ –
+  sonst weichen „Offene FVGs (Anzahl)“ und „FVG im Gewinnbereich“ ab. Alternativ Referenzen neu exportieren.
 - Offen, nicht entschieden: Farbe „Kein Regime“ evtl. in „Regime endet“ umbenennen.
 
 ## Dateien
@@ -166,11 +169,17 @@ und meldet Fehler zurück.
   Label des aktuellen Setups zeigt unten „R: 2.3 %“ (eine Nachkommastelle).
 - FVG-Filter (Issue #18, mit Nutzer geklärt; nicht im Guide): Setting, Default AUS (Nutzer: muss abschaltbar sein).
   Long ungültig bei ungefülltem BÄRISCHEM FVG, Short bei bullischem, das [Entry, Ziel 1:1] irgendwie überlappt.
-  FVG zählt, bis komplett gefüllt (teilweise gefüllt → Restlücke). Wirkung wie Risiko-Filter (setupOk = riskOk
+  Füllregeln (Issue #36, Nutzer-Vorgabe nach Recherche, kein allgemeiner Standard): Default nur Kerzenkörper
+  (Open–Close) der Folgekerzen, geschlossen erst bei kompletter Abdeckung, bis dahin unverändert. Optionen:
+  „Mitte berührt (Consequent Encroachment)“ = geschlossen ab 50 % der URSPRÜNGLICHEN Lücke (Fvg.mid), „Teilweise
+  Füllung verkleinert“ + „Dochte zählen“ = Verhalten bis v5. Die Lücke selbst entsteht immer aus Hoch/Tief der
+  Kerzen 1 und 3. Wirkung wie Risiko-Filter (setupOk = riskOk
   und kein FVG). TFs 4h/D/W/M je mit Rückschau in Kerzen (W + D: D/W/M, M + W: W/M, D + 4h: alle). HTF-FVGs per request.security ([1] +
   lookahead) aus abgeschlossenen Kerzen, gefüllt mit Chart-Kerzen; nur ungefüllte werden gemerkt. Optionale
   Kontroll-Kästen. FVGs werden immer berechnet (auch Filter aus), damit die Screener-Spalte „FVG im
-  Gewinnbereich (1 / 0)“ unabhängig vom Filter gefüllt ist. Strategie noch NICHT synchronisiert (erst nach Test im Indikator).
+  Gewinnbereich (1 / 0)“ unabhängig vom Filter gefüllt ist. Strategie (seit Nov. 2026, mit #36): gleicher Filter als
+  Order-Bedingung (fvgOk), Default aus; FVGs dort NUR bei aktivem Filter berechnet, Monthly-Abruf nur dann; Weekly-Kerzen
+  kommen aus dem bestehenden Weekly-Abruf (htfData wie im Indikator).
 - Risiko: 0,5–1 % (normal) bzw. 1–2 % (stark) des max. akzeptierten Depot-Drawdowns pro Trade.
 - Sektor-Trend (Issue #16, Nutzer-Regel, nicht im Guide): Trend des Sektor-ETF (akj.sectorEtf oder Input „Sektor-ETF“,
   auch Index möglich) in den beiden Zeiteinheiten der Spielweise, gleiche Trigger-Regel wie die Aktie, aus
@@ -181,13 +190,13 @@ und meldet Fehler zurück.
   (nur Orders gefiltert). Logik bewusst (noch) nicht in der Library – wenige Zeilen, nächste Version bündeln.
 
 ## Stand / nächste Schritte (Nov. 2026)
-- Zuletzt gemergt (11.11.2026): PR #32 Performance-Nachtrag (HTF-Abrufe nur bei Bedarf, FVG-Kästen einmal je Kerze,
+- Zuletzt gemergt (12.11.2026): PR #35 Sektor-Trend (#16) + %R-Inputs zu den BB. Davor (11.11.): PR #34 Library-
+  Umstellung (#17), PR #32 Performance-Nachtrag (HTF-Abrufe nur bei Bedarf, FVG-Kästen einmal je Kerze,
   Strategie ein Weekly-Abruf), PR #31 ADJ-Warnung (#26), PR #30 Einstellungen/Style-Reiter, PR #29 Puffer (#24).
   Davor #21 Performance (PR #27), D + 4h (#14), FVG-Filter (#18). Issue #26 war kein Bug (Dividendenbereinigung je Chart).
-- Aktuelle Issues immer per `gh issue list -R bbccd/AKJ2` holen (diese Liste kann veralten). Stand 11.11.2026 offen:
-  nur die Ideen #16 (relative Stärke) und #17 (Library + Tests).
-- Kandidaten: FVG-Filter in `akj_strategy.pine` übernehmen (Indikator ist getestet); Idee #16 relative Stärke;
-  Idee #17 Library + Tests (siehe „Tests“ oben).
+- Aktuelle Issues immer per `gh issue list -R bbccd/AKJ2` holen (diese Liste kann veralten). Stand 12.11.2026 offen:
+  nur #36 (FVG-Füllregeln, in Arbeit auf feature/36-fvg-fill).
+- Kandidaten: Sektor-Logik in die Library (mit der nächsten Version bündeln).
 - Arbeitsweise des Nutzers: kopiert den Code in den Pine-Editor, testet im Chart/Screener und meldet Fehler zurück.
   Änderungen deshalb klein und nachvollziehbar halten und erklären, was zu prüfen ist.
 
@@ -200,5 +209,5 @@ und meldet Fehler zurück.
   Folge: Nach den Earnings erscheinen beim Neuladen Setups aus dem ehemaligen Fenster. Vom Nutzer als
   akzeptabel/hilfreich bewertet (live war die Sperre aktiv); im README dokumentiert.
 - `strategy()`-Version für Backtests (`akj_strategy.pine`, in `main`), Positionsgröße aus Risiko-Regeln.
-  Setup-Logik seit Nov. 2026 aus der Library (siehe „Library + Tests“ oben); FVG-Filter in der Strategie weiterhin
-  nicht aktiv (Kandidat).
+  Setup-Logik seit Nov. 2026 aus der Library (siehe „Library + Tests“ oben); FVG-Filter seit #36 auch in der
+  Strategie (Default aus).

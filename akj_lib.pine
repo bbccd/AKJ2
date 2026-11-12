@@ -72,6 +72,8 @@ export bufLevel(float price, int dir, float tick, int ticks, float thresh, float
 // @field idx  Nummer der jüngsten der drei Kerzen in ihrer Zeiteinheit (für die Rückschau).
 // @field t    Startzeit der ältesten der drei Kerzen (nur für die Anzeige).
 // @field dead Erledigt: gefüllt oder Rückschau abgelaufen (wird aus den Listen nach und nach entfernt).
+// @field mid  Mitte der ursprünglichen Lücke („Consequent Encroachment“, 50 %); bleibt beim Verkleinern erhalten.
+//             na = unbekannt (dann rechnet fvgFill mit der Mitte des Rests).
 export type Fvg
     float top
     float bot
@@ -80,6 +82,7 @@ export type Fvg
     int   idx
     int   t
     bool  dead = false
+    float mid  = na
 
 // @function Fügt ein FVG sortiert ein: bullische Liste absteigend nach `top`, bärische aufsteigend nach `bot`.
 // @param list Sortierte Liste (bullisch oder bärisch, passend zu `f.dir`).
@@ -108,9 +111,9 @@ export fvgInsert(array<Fvg> list, Fvg f) =>
 export fvgAdd(array<Fvg> bull, array<Fvg> bear, array<Fvg> queue, int tfId, float h0, float l0, float h2, float l2, int t2, int idx) =>
     Fvg f = na
     if l0 > h2
-        f := Fvg.new(l0, h2, 1, tfId, idx, t2)
+        f := Fvg.new(l0, h2, 1, tfId, idx, t2, mid = (l0 + h2) / 2)
     else if h0 < l2
-        f := Fvg.new(l2, h0, -1, tfId, idx, t2)
+        f := Fvg.new(l2, h0, -1, tfId, idx, t2, mid = (l2 + h0) / 2)
     if not na(f)
         fvgInsert(f.dir == 1 ? bull : bear, f)
         queue.push(f)
@@ -136,14 +139,19 @@ export fvgExpire(array<Fvg> queue, int cnt, int lb) =>
             break
     killed
 
-// @function Füllt FVGs mit einer Kerze: komplett gefüllt → erledigt und entfernt, teilweise gefüllt → Rest
-//           verkleinert. Nur die vorderen FVGs der sortierten Liste können betroffen sein.
-// @param list Sortierte Liste (bullisch oder bärisch).
-// @param bull true = bullische Liste (gefüllt von oben durch das Kerzentief), false = bärische (durch das Hoch).
-// @param lo   Tief der Kerze.
-// @param hi   Hoch der Kerze.
-// @returns Anzahl der komplett gefüllten FVGs.
-export fvgFill(array<Fvg> list, bool bull, float lo, float hi) =>
+// @function Füllt FVGs mit einer Kerze (Issue #36). Geschlossen (erledigt und entfernt) ist ein FVG, sobald der
+//           Füllbereich der Kerze die ferne Kante erreicht (`ce = false`, komplett abgedeckt) bzw. die Mitte der
+//           ursprünglichen Lücke (`ce = true`, „Consequent Encroachment“). Davor bleibt es unverändert – oder wird
+//           mit `partial = true` bei jeder Berührung auf den ungefüllten Rest verkleinert. Nur die vorderen FVGs der
+//           sortierten Liste können betroffen sein.
+// @param list    Sortierte Liste (bullisch oder bärisch).
+// @param bull    true = bullische Liste (gefüllt von oben durch `lo`), false = bärische (von unten durch `hi`).
+// @param lo      Untere Grenze des Füllbereichs der Kerze: Tief (Dochte zählen) oder min(Open, Close) (nur Körper).
+// @param hi      Obere Grenze des Füllbereichs: Hoch bzw. max(Open, Close).
+// @param partial true = teilweise Füllung verkleinert den Rest (top bzw. bot wandert mit).
+// @param ce      true = geschlossen, sobald die Mitte erreicht ist; false = erst bei kompletter Abdeckung.
+// @returns Anzahl der geschlossenen FVGs.
+export fvgFill(array<Fvg> list, bool bull, float lo, float hi, bool partial, bool ce) =>
     int filled = 0
     int i = 0
     while i < list.size()
@@ -151,13 +159,16 @@ export fvgFill(array<Fvg> list, bool bull, float lo, float hi) =>
         if f.dead
             list.remove(i)
         else if bull ? lo < f.top : hi > f.bot
-            if bull ? lo <= f.bot : hi >= f.top
+            mid  = na(f.mid) ? (f.top + f.bot) / 2 : f.mid
+            done = bull ? lo <= (ce ? mid : f.bot) : hi >= (ce ? mid : f.top)
+            if done
                 f.dead := true
                 list.remove(i)
                 filled += 1
             else
-                f.top := bull ? lo : f.top
-                f.bot := bull ? f.bot : hi
+                if partial
+                    f.top := bull ? lo : f.top
+                    f.bot := bull ? f.bot : hi
                 i += 1
         else
             break
