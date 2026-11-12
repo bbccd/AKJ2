@@ -32,6 +32,12 @@ D + 4h: 4h-Chart mit regulären Handelszeiten verwenden (keine Extended Hours). 
   Packaged Software | (evtl. XLK)“. Sektor und Industrie kommen von TradingView. Der Sektor-ETF (Select Sector
   SPDR) ist eine eigene Näherung (TradingView-Sektoren ≠ GICS) und gilt nur für S&P-500-Aktien – die
   Mitgliedschaft liefert Pine nicht, daher „evtl.“. Index-Mitgliedschaft und Heimatbörse liefert Pine nicht.
+- **Sektor-Trend** (Issue #16): vierte Spalte der Tabelle, z. B. „XLK  W ▲  D ▲“ – Trend des Sektor-ETF in den
+  beiden Zeiteinheiten der Spielweise (dieselbe Trigger-Regel wie bei der Aktie). Grün = beide Kauf (passt zu
+  Long-Setups), rot = beide Verkauf (passt zu Short), grau = gemischt. Auch in der Status-Tabelle und im Label des
+  aktuellen Setups („Sektor XLK ✔ / ✘“). Der Indikator filtert damit nicht; der Screener-Plot „Sektor-Trend
+  (1 / -1 / 0)“ erlaubt das Filtern im Pine Screener. ETF automatisch aus dem TradingView-Sektor oder per Input
+  „Sektor-ETF“ (auch ein Index wie SPY möglich). Abschaltbar (spart zwei Abrufe).
 - Moving Averages 20 / 50 / 150 / 200 (SMA oder EMA), Farbverlauf Gelb → Orange → Rot von kurz nach lang;
   einzeln und gesamt abschaltbar, Typ gemeinsam einstellbar; Farbe, Dicke und Linienart je MA im Reiter „Style“
 - Einstellungen: Reiter „Inputs“ zuerst die Regeln (Spielweise & Trend, Setup & Entry, Earnings, Fair Value
@@ -57,8 +63,7 @@ D + 4h: 4h-Chart mit regulären Handelszeiten verwenden (keine Extended Hours). 
 ## Backtest (Strategie)
 
 [`akj_strategy.pine`](akj_strategy.pine) ist die `strategy()`-Version für den Strategietester von
-TradingView (nur Daily-Chart). Die Setup-Logik ist aus dem Indikator kopiert – bei Regeländerungen
-müssen beide Dateien angepasst werden.
+TradingView (nur Daily-Chart). Die Setup-Logik kommt wie im Indikator aus der Library `akj_lib.pine`.
 
 - **Entry:** echte Stop-Order auf dem Entry des Setups, wird täglich nachgezogen bzw. gelöscht, wenn das
   Setup ungültig wird (Trigger weg, Earnings, Risiko außerhalb 2–7 %). Während ein Trade läuft, werden
@@ -68,6 +73,11 @@ müssen beide Dateien angepasst werden.
 - **Ausstieg** (Setting): *CRV 1:1* – ganze Position bei Ziel = Entry ± Risiko; oder *Trailing* – bei
   CRV 1:1 SL auf Einstand, danach SL am BB-Mittelband (nur in Gewinnrichtung). Default: Trailing nur
   für Long, Short immer CRV 1:1.
+- **Sektor-Filter** (Issue #16, Default **an**): Eine Order wird nur platziert, wenn der Sektor-ETF im Weekly
+  UND Daily denselben Trend hat wie das Setup (Long: beide Kauf, Short: beide Verkauf; ein Setup des ETF ist
+  nicht nötig). Geprüft mit dem Zustand für die nächste Kerze, wie der Trend der Aktie. ETF automatisch aus dem
+  TradingView-Sektor (nur USD/S&P 500) oder per Input „Sektor-ETF“. **Ohne bekannten ETF gibt es mit aktivem
+  Filter keine Trades** – der Chart zeigt dann eine orange Warnung; ETF eintragen oder Filter abschalten.
 - **Kosten:** 1 $ Kommission pro Order, 2 Ticks Slippage – im Reiter „Eigenschaften“ der Strategie änderbar.
   Bar Magnifier ist aktiv (Intraday-Daten für die Reihenfolge innerhalb einer Tageskerze).
 
@@ -83,6 +93,8 @@ Ticker einer Watchlist finden, die aktuell ein gültiges Setup haben:
 2. Pine Screener öffnen → Watchlist wählen → Indikator **AKJ2.0** wählen → Timeframe **1D**.
 3. Filter **„Setup-Status (1 Long / -1 Short / 0)“ = 1** (Long) bzw. **= -1** (Short) → Scannen.
 4. Optional **„Setup Entry“**, **„Setup SL“** und **„Setup Risiko (%)“** als Spalten anzeigen.
+5. Optional zusätzlich **„Sektor-Trend (1 / -1 / 0)“ = 1** (bzw. = -1): nur Setups, deren Sektor-ETF im
+   Weekly und Daily im gleichen Trend steht (Issue #16).
 
 Der Setup-Status ist 0, sobald der Entry erreicht ist, der Trigger wegfällt oder das Risiko außerhalb
 des eingestellten Bereichs liegt. Die Werte stehen auch
