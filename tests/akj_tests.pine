@@ -1,37 +1,68 @@
 //@version=6
 // Tests für die Library akj_lib.pine (Issue #17). Als Indikator im Pine-Editor anlegen und zu einem beliebigen
 // Chart hinzufügen: Das Skript benutzt die Chart-Kerzen nicht, sondern rechnet mit erfundenen Werten und zeigt
-// bestanden / fehlgeschlagen als Tabelle in der Chart-Mitte; Fehlschläge stehen zusätzlich in den Pine Logs.
+// das Ergebnis als Tabelle oben in der Mitte (gesamt und je Bereich bestanden/gesamt); Fehlschläge erscheinen
+// in einer roten Tabelle in der Chart-Mitte und zusätzlich in den Pine Logs.
 // Importzeile: <Benutzername> = TradingView-Benutzername des Veröffentlichers, Zahl = Version der Library.
-indicator("AKJ2.0 – Tests", shorttitle = "AKJ2 Tests", overlay = false)
+//
+// Aufbau: Jeder Bereich ist eine eigene Funktion test…() in der Reihenfolge der Library (Trend, Puffer, FVG,
+// Hilfsfunktionen, Setup, Risiko, Serien). Variablen gelten nur innerhalb ihrer Funktion – Namen wie `bull`
+// dürfen sich in verschiedenen Bereichen wiederholen. Testnamen: „Situation → Erwartung“; der Bereich wird bei
+// Fehlschlägen vorangestellt. Neue Tests in den passenden Bereich schreiben; neuer Bereich = neue Funktion, die
+// unten bei TESTLAUF aufgerufen wird.
+// overlay = true: Die Tabelle steht im großen Chart-Fenster (in einem eigenen Fenster unter dem Chart war sie zu
+// niedrig und wurde abgeschnitten). Das Skript zeichnet sonst nichts in den Chart.
+indicator("AKJ2.0 – Tests", shorttitle = "AKJ2 Tests", overlay = true)
 import bBccdde/AKJ2/6 as akj
 
 // ═══════════════════════════════════════════════════════════════════
 // MINI-TESTRAHMEN
+// beginGroup() startet einen Bereich; alle folgenden check…() zählen zu ihm.
 // ═══════════════════════════════════════════════════════════════════
-var array<string> failed = array.new<string>()
-var array<int>    counts = array.new<int>(2, 0)   // [0] bestanden, [1] fehlgeschlagen
+var array<string> grpName = array.new<string>()
+var array<int>    grpOk   = array.new<int>()
+var array<int>    grpFail = array.new<int>()
+var array<string> failed  = array.new<string>()
 EPS = 1e-6
 
-checkF(string name, float got, float want) =>
-    if math.abs(got - want) < EPS
-        array.set(counts, 0, array.get(counts, 0) + 1)
+beginGroup(string name) =>
+    grpName.push(name)
+    grpOk.push(0)
+    grpFail.push(0)
+
+record(string name, bool ok, string detail) =>
+    g = grpName.size() - 1
+    if ok
+        grpOk.set(g, grpOk.get(g) + 1)
     else
-        array.set(counts, 1, array.get(counts, 1) + 1)
-        array.push(failed, name + ": erwartet " + str.tostring(want) + ", erhalten " + str.tostring(got))
+        grpFail.set(g, grpFail.get(g) + 1)
+        failed.push(grpName.get(g) + " – " + name + ": " + detail)
+
+checkF(string name, float got, float want) =>
+    record(name, math.abs(got - want) < EPS, "erwartet " + str.tostring(want) + ", erhalten " + str.tostring(got))
 
 checkI(string name, int got, int want) =>
     checkF(name, got, want)
 
 checkB(string name, bool got, bool want) =>
-    checkF(name, got ? 1 : 0, want ? 1 : 0)
+    record(name, got == want, "erwartet " + (want ? "ja" : "nein") + ", erhalten " + (got ? "ja" : "nein"))
 
 checkS(string name, string got, string want) =>
-    if got == want
-        array.set(counts, 0, array.get(counts, 0) + 1)
-    else
-        array.set(counts, 1, array.get(counts, 1) + 1)
-        array.push(failed, name + ": erwartet „" + want + "“, erhalten „" + got + "“")
+    record(name, got == want, "erwartet „" + want + "“, erhalten „" + got + "“")
+
+// ═══════════════════════════════════════════════════════════════════
+// BAUHELFER
+// ═══════════════════════════════════════════════════════════════════
+// Leere FVG-Liste bzw. Liste mit einem FVG (Zeiteinheit 1, Kerze 1, Zeit 0).
+fvgNone() =>
+    array.new<akj.Fvg>()
+fvgOne(float top, float bot, int dir) =>
+    l = array.new<akj.Fvg>()
+    akj.fvgInsert(l, akj.Fvg.new(top, bot, dir, 1, 1, 0))
+    l
+// Ein schon erledigtes FVG (gefüllt oder abgelaufen).
+fvgDead(float top, float bot, int dir, int idx) =>
+    akj.Fvg.new(top, bot, dir, 1, idx, 0, dead = true)
 
 // Standard-Puffer wie die Inputs des Indikators: Tick 0,01, 3 Ticks bis Kurs 100, darüber 0,3 ‰, Raster 0,50.
 bufStd(float price, int dir) =>
@@ -39,6 +70,8 @@ bufStd(float price, int dir) =>
 
 // Standard-Regeln (Defaults des Indikators) und zwei Kerzen-Helfer für den Zustandsautomaten:
 // abgeschlossene Kerze, Setups erlaubt, keine Sperre; Long- bzw. Short-Trigger aktiv und nach dem Close weiter aktiv.
+// Für alle anderen Fälle akj.setupStep direkt aufrufen. Reihenfolge der Schalter dort:
+// confirmed, enabled, longTrend, shortTrend, longNext, shortNext, blocked.
 R = akj.Rules.new()
 stepL(akj.Setup s, float o, float h, float l, float c, float wr, int bi) =>
     akj.setupStep(s, R, o, h, l, c, wr, bi, true, true, true, false, true, false, false)
@@ -69,367 +102,453 @@ if bar_index < 30
     recEma.push(synEma)
 
 // ═══════════════════════════════════════════════════════════════════
-// TESTFÄLLE (nur einmal, auf der jüngsten Kerze)
+// TREND (trendStep)
+// Bänder in allen Fällen: oben 100, unten 90 (aktuelle und Vorkerze).
 // ═══════════════════════════════════════════════════════════════════
-if barstate.islast
-    // ── Puffer (Issue #24) ──
-    checkF("Puffer: 50,00 Long-Entry (3 Ticks)",            bufStd(50.00, 1),  50.03)
-    checkF("Puffer: 49,95 Long-Entry knapp unter 50 → hinter die Stufe", bufStd(49.95, 1), 50.03)
-    checkF("Puffer: 49,90 Long-Entry, Stufe weit genug weg", bufStd(49.90, 1),  49.93)
-    checkF("Puffer: 50,05 Long-SL knapp über 50 → unter die Stufe", bufStd(50.05, -1), 49.97)
-    checkF("Puffer: 49,60 Long-SL, Stufe weit genug weg",   bufStd(49.60, -1), 49.57)
-    checkF("Puffer: 49,52 Long-SL knapp über 49,50 → unter die Stufe", bufStd(49.52, -1), 49.47)
-    checkF("Puffer: 500 Long-Entry (0,3 ‰ = 0,15)",          bufStd(500.0, 1),  500.15)
-    checkF("Puffer: 500 Long-SL (0,3 ‰ = 0,15)",             bufStd(500.0, -1), 499.85)
-    checkF("Puffer: 123,45 → 0,04 aufgerundet, dann Stufe 123,50", bufStd(123.45, 1), 123.54)
-    checkF("Puffer: Schwelle 100,00 zählt noch als Ticks",   bufStd(100.00, 1), 100.03)
-    checkF("Puffer: 100,01 liegt über der Schwelle (‰)",     bufStd(100.01, 1), 100.05)
-    checkF("Puffer: Glatte Zahlen aus → 49,98",              akj.bufLevel(49.95, 1, 0.01, 3, 100.0, 0.3, false, 0.5), 49.98)
-    checkF("Puffer: Tick 0,05 → 3 Ticks = 0,15",             akj.bufLevel(20.00, 1, 0.05, 3, 100.0, 0.3, true, 0.5), 20.15)
-    checkF("Puffer: 0 Ticks → Level = Kurs",                 akj.bufLevel(49.90, 1, 0.01, 0, 100.0, 0.3, false, 0.5), 49.90)
-    checkF("Puffer allein: 50 → 0,03",                       akj.priceBuffer(50.0, 0.01, 3, 100.0, 0.3), 0.03)
-    checkF("Puffer allein: 500 → 0,15",                      akj.priceBuffer(500.0, 0.01, 3, 100.0, 0.3), 0.15)
+testTrend() =>
+    beginGroup("Trend")
+    checkI("2x Close über oberem BB → Kauf",             akj.trendStep(0, 101.0, 100.5, 100.0, 100.0, 90.0, 90.0), 1)
+    checkI("nur 1x Close über oberem BB → unverändert",  akj.trendStep(0, 101.0, 99.0, 100.0, 100.0, 90.0, 90.0), 0)
+    checkI("Close = oberes BB zählt nicht",              akj.trendStep(0, 100.0, 100.5, 100.0, 100.0, 90.0, 90.0), 0)
+    checkI("2x Close unter unterem BB → Verkauf",        akj.trendStep(1, 89.0, 89.5, 100.0, 100.0, 90.0, 90.0), -1)
+    checkI("nur 1x Close unter unterem BB → Kauf bleibt", akj.trendStep(1, 89.0, 91.0, 100.0, 100.0, 90.0, 90.0), 1)
+    checkI("Verkauf hält, solange kein Gegentrigger",    akj.trendStep(-1, 95.0, 95.0, 100.0, 100.0, 90.0, 90.0), -1)
+    checkI("Kauf-Trigger dreht Verkauf",                 akj.trendStep(-1, 101.0, 100.5, 100.0, 100.0, 90.0, 90.0), 1)
+
+// ═══════════════════════════════════════════════════════════════════
+// PUFFER (Issue #24: priceBuffer, bufLevel)
+// ═══════════════════════════════════════════════════════════════════
+testPuffer() =>
+    beginGroup("Puffer")
+    checkF("50,00 Long-Entry → 3 Ticks",                     bufStd(50.00, 1),  50.03)
+    checkF("49,95 Long-Entry knapp unter 50 → hinter die Stufe", bufStd(49.95, 1), 50.03)
+    checkF("49,90 Long-Entry, Stufe weit genug weg",          bufStd(49.90, 1),  49.93)
+    checkF("50,05 Long-SL knapp über 50 → unter die Stufe",   bufStd(50.05, -1), 49.97)
+    checkF("49,60 Long-SL, Stufe weit genug weg",             bufStd(49.60, -1), 49.57)
+    checkF("49,52 Long-SL knapp über 49,50 → unter die Stufe", bufStd(49.52, -1), 49.47)
+    checkF("500 Long-Entry → 0,3 ‰ = 0,15",                   bufStd(500.0, 1),  500.15)
+    checkF("500 Long-SL → 0,3 ‰ = 0,15",                      bufStd(500.0, -1), 499.85)
+    checkF("123,45 → 0,04 aufgerundet, dann Stufe 123,50",    bufStd(123.45, 1), 123.54)
+    checkF("Schwelle 100,00 zählt noch als Ticks",            bufStd(100.00, 1), 100.03)
+    checkF("100,01 liegt über der Schwelle (‰)",              bufStd(100.01, 1), 100.05)
+    checkF("Glatte Zahlen aus → 49,98",                       akj.bufLevel(49.95, 1, 0.01, 3, 100.0, 0.3, false, 0.5), 49.98)
+    checkF("Tick 0,05 → 3 Ticks = 0,15",                      akj.bufLevel(20.00, 1, 0.05, 3, 100.0, 0.3, true, 0.5), 20.15)
+    checkF("0 Ticks → Level = Kurs",                          akj.bufLevel(49.90, 1, 0.01, 0, 100.0, 0.3, false, 0.5), 49.90)
+    checkF("Puffer allein: 50 → 0,03",                        akj.priceBuffer(50.0, 0.01, 3, 100.0, 0.3), 0.03)
+    checkF("Puffer allein: 500 → 0,15",                       akj.priceBuffer(500.0, 0.01, 3, 100.0, 0.3), 0.15)
     checkF("Puffer allein: 123,45 → 0,037 aufgerundet auf 0,04", akj.priceBuffer(123.45, 0.01, 3, 100.0, 0.3), 0.04)
 
-    // ── Trend-Schritt ──
-    checkI("Trend: 2x Close über oberem BB → Kauf",          akj.trendStep(0, 101.0, 100.5, 100.0, 100.0, 90.0, 90.0), 1)
-    checkI("Trend: nur 1x Close über oberem BB → unverändert", akj.trendStep(0, 101.0, 99.0, 100.0, 100.0, 90.0, 90.0), 0)
-    checkI("Trend: Close = oberes BB zählt nicht",           akj.trendStep(0, 100.0, 100.5, 100.0, 100.0, 90.0, 90.0), 0)
-    checkI("Trend: 2x Close unter unterem BB → Verkauf",     akj.trendStep(1, 89.0, 89.5, 100.0, 100.0, 90.0, 90.0), -1)
-    checkI("Trend: nur 1x Close unter unterem BB → Kauf bleibt", akj.trendStep(1, 89.0, 91.0, 100.0, 100.0, 90.0, 90.0), 1)
-    checkI("Trend: Verkauf hält, solange kein Gegentrigger", akj.trendStep(-1, 95.0, 95.0, 100.0, 100.0, 90.0, 90.0), -1)
-    checkI("Trend: Kauf-Trigger dreht Verkauf",              akj.trendStep(-1, 101.0, 100.5, 100.0, 100.0, 90.0, 90.0), 1)
-
-    // ── FVG: sortiertes Einfügen ──
-    bullS = array.new<akj.Fvg>()
+// ═══════════════════════════════════════════════════════════════════
+// FVG ANLEGEN (fvgInsert, fvgAdd)
+// ═══════════════════════════════════════════════════════════════════
+testFvgAnlegen() =>
+    beginGroup("FVG anlegen")
+    // Sortiertes Einfügen: bullisch absteigend nach top, bärisch aufsteigend nach bot.
+    bullS = fvgNone()
     akj.fvgInsert(bullS, akj.Fvg.new(100.0, 99.0, 1, 1, 1, 0))
     akj.fvgInsert(bullS, akj.Fvg.new(105.0, 104.0, 1, 1, 2, 0))
     akj.fvgInsert(bullS, akj.Fvg.new(102.0, 101.0, 1, 1, 3, 0))
-    checkI("FVG insert: bullisch 3 Einträge",                 bullS.size(), 3)
-    checkF("FVG insert: bullisch absteigend nach top (1.)",  bullS.get(0).top, 105.0)
-    checkF("FVG insert: bullisch absteigend nach top (2.)",  bullS.get(1).top, 102.0)
-    checkF("FVG insert: bullisch absteigend nach top (3.)",  bullS.get(2).top, 100.0)
-    bearS = array.new<akj.Fvg>()
+    checkI("Einfügen bullisch: 3 Einträge",                   bullS.size(), 3)
+    checkF("Einfügen bullisch: absteigend nach top (1.)",     bullS.get(0).top, 105.0)
+    checkF("Einfügen bullisch: absteigend nach top (2.)",     bullS.get(1).top, 102.0)
+    checkF("Einfügen bullisch: absteigend nach top (3.)",     bullS.get(2).top, 100.0)
+    bearS = fvgNone()
     akj.fvgInsert(bearS, akj.Fvg.new(101.0, 100.0, -1, 1, 1, 0))
     akj.fvgInsert(bearS, akj.Fvg.new(96.0, 95.0, -1, 1, 2, 0))
     akj.fvgInsert(bearS, akj.Fvg.new(99.0, 98.0, -1, 1, 3, 0))
-    checkF("FVG insert: bärisch aufsteigend nach bot (1.)",  bearS.get(0).bot, 95.0)
-    checkF("FVG insert: bärisch aufsteigend nach bot (2.)",  bearS.get(1).bot, 98.0)
-    checkF("FVG insert: bärisch aufsteigend nach bot (3.)",  bearS.get(2).bot, 100.0)
+    checkF("Einfügen bärisch: aufsteigend nach bot (1.)",     bearS.get(0).bot, 95.0)
+    checkF("Einfügen bärisch: aufsteigend nach bot (2.)",     bearS.get(1).bot, 98.0)
+    checkF("Einfügen bärisch: aufsteigend nach bot (3.)",     bearS.get(2).bot, 100.0)
+    // Anlegen aus drei Kerzen: fvgAdd(…, Hoch und Tief der jüngsten Kerze, Hoch und Tief der ältesten, Zeit, Nummer).
+    bull = fvgNone()
+    bear = fvgNone()
+    q    = fvgNone()
+    checkI("Tief 105 > Hoch[2] 103 → bullisch angelegt (1)",  akj.fvgAdd(bull, bear, q, 1, 108.0, 105.0, 103.0, 101.0, 1000, 10), 1)
+    checkF("bullisch: top = Tief 105",                        bull.get(0).top, 105.0)
+    checkF("bullisch: bot = Hoch[2] 103",                     bull.get(0).bot, 103.0)
+    checkI("bullisch: dir = 1",                               bull.get(0).dir, 1)
+    checkI("bullisch: in der Warteschlange",                  q.size(), 1)
+    checkI("Hoch 95 < Tief[2] 97 → bärisch angelegt (1)",     akj.fvgAdd(bull, bear, q, 1, 95.0, 93.0, 99.0, 97.0, 2000, 11), 1)
+    checkF("bärisch: top = Tief[2] 97",                       bear.get(0).top, 97.0)
+    checkF("bärisch: bot = Hoch 95",                          bear.get(0).bot, 95.0)
+    checkI("keine Lücke → 0",                                 akj.fvgAdd(bull, bear, q, 1, 102.0, 100.0, 101.0, 99.0, 3000, 12), 0)
+    checkI("Berührung (Tief = Hoch[2]) ist keine Lücke",      akj.fvgAdd(bull, bear, q, 1, 104.0, 103.0, 103.0, 101.0, 4000, 13), 0)
+    checkI("Warteschlange danach 2",                          q.size(), 2)
 
-    // ── FVG: Anlegen aus drei Kerzen ──
-    bullA = array.new<akj.Fvg>()
-    bearA = array.new<akj.Fvg>()
-    qA    = array.new<akj.Fvg>()
-    checkI("FVG add: Tief 105 > Hoch[2] 103 → bullisch (1)",  akj.fvgAdd(bullA, bearA, qA, 1, 108.0, 105.0, 103.0, 101.0, 1000, 10), 1)
-    checkF("FVG add: bullisch top = Tief 105",               bullA.get(0).top, 105.0)
-    checkF("FVG add: bullisch bot = Hoch[2] 103",            bullA.get(0).bot, 103.0)
-    checkI("FVG add: bullisch dir = 1",                      bullA.get(0).dir, 1)
-    checkI("FVG add: in der Warteschlange",                  qA.size(), 1)
-    checkI("FVG add: Hoch 95 < Tief[2] 97 → bärisch (1)",     akj.fvgAdd(bullA, bearA, qA, 1, 95.0, 93.0, 99.0, 97.0, 2000, 11), 1)
-    checkF("FVG add: bärisch top = Tief[2] 97",              bearA.get(0).top, 97.0)
-    checkF("FVG add: bärisch bot = Hoch 95",                 bearA.get(0).bot, 95.0)
-    checkI("FVG add: keine Lücke → 0",                       akj.fvgAdd(bullA, bearA, qA, 1, 102.0, 100.0, 101.0, 99.0, 3000, 12), 0)
-    checkI("FVG add: Berührung (Tief = Hoch[2]) ist keine Lücke", akj.fvgAdd(bullA, bearA, qA, 1, 104.0, 103.0, 103.0, 101.0, 4000, 13), 0)
-    checkI("FVG add: Warteschlange danach 2",                qA.size(), 2)
+// ═══════════════════════════════════════════════════════════════════
+// FVG ABLAUF (fvgExpire: Rückschau in Kerzen)
+// ═══════════════════════════════════════════════════════════════════
+testFvgAblauf() =>
+    beginGroup("FVG Ablauf")
+    q = fvgNone()
+    q.push(akj.Fvg.new(100.0, 99.0, 1, 1, 1, 0))
+    q.push(akj.Fvg.new(100.0, 99.0, 1, 1, 5, 0))
+    q.push(akj.Fvg.new(100.0, 99.0, 1, 1, 9, 0))
+    checkI("Kerze 12, Rückschau 5 → 2 abgelaufen",            akj.fvgExpire(q, 12, 5), 2)
+    checkI("Warteschlange danach 1",                          q.size(), 1)
+    checkI("übrig ist Kerze 9",                               q.first().idx, 9)
+    checkI("Alter = Rückschau läuft nicht ab",                akj.fvgExpire(q, 14, 5), 0)
+    checkI("Alter > Rückschau läuft ab",                      akj.fvgExpire(q, 15, 5), 1)
+    qd = fvgNone()
+    qd.push(fvgDead(100.0, 99.0, 1, 1))
+    qd.push(akj.Fvg.new(100.0, 99.0, 1, 1, 9, 0))
+    checkI("schon erledigte werden entfernt, nicht gezählt",  akj.fvgExpire(qd, 12, 5), 0)
+    checkI("erledigtes aus der Warteschlange raus",           qd.size(), 1)
 
-    // ── FVG: Rückschau / Ablauf ──
-    qE = array.new<akj.Fvg>()
-    qE.push(akj.Fvg.new(100.0, 99.0, 1, 1, 1, 0))
-    qE.push(akj.Fvg.new(100.0, 99.0, 1, 1, 5, 0))
-    qE.push(akj.Fvg.new(100.0, 99.0, 1, 1, 9, 0))
-    checkI("FVG expire: Kerze 12, Rückschau 5 → 2 abgelaufen", akj.fvgExpire(qE, 12, 5), 2)
-    checkI("FVG expire: Warteschlange danach 1",             qE.size(), 1)
-    checkI("FVG expire: übrig ist Kerze 9",                  qE.first().idx, 9)
-    checkI("FVG expire: Alter = Rückschau läuft nicht ab",   akj.fvgExpire(qE, 14, 5), 0)
-    checkI("FVG expire: Alter > Rückschau läuft ab",         akj.fvgExpire(qE, 15, 5), 1)
-    qD = array.new<akj.Fvg>()
-    fDead = akj.Fvg.new(100.0, 99.0, 1, 1, 1, 0)
-    fDead.dead := true
-    qD.push(fDead)
-    qD.push(akj.Fvg.new(100.0, 99.0, 1, 1, 9, 0))
-    checkI("FVG expire: schon erledigte werden entfernt, nicht gezählt", akj.fvgExpire(qD, 12, 5), 0)
-    checkI("FVG expire: erledigtes aus Warteschlange raus",  qD.size(), 1)
+// ═══════════════════════════════════════════════════════════════════
+// FVG FÜLLEN (Issue #36: fvgFill(Liste, bullisch?, Füllbereich unten, oben, Teilfüllung?, Mitte?))
+// Bullisches Test-FVG 103–105 (Mitte 104), bärisches 95–97 (Mitte 96).
+// ═══════════════════════════════════════════════════════════════════
+testFvgFuellen() =>
+    beginGroup("FVG füllen")
+    // Default: geschlossen erst bei kompletter Abdeckung, keine Verkleinerung.
+    bull = fvgOne(105.0, 103.0, 1)
+    checkI("Tief 106 über dem FVG → nichts",                  akj.fvgFill(bull, true, 106.0, 110.0, false, false), 0)
+    checkF("top unverändert 105",                             bull.get(0).top, 105.0)
+    checkI("Tief 104 in der Lücke → nicht geschlossen (0)",   akj.fvgFill(bull, true, 104.0, 110.0, false, false), 0)
+    checkF("ohne Teilfüllung bleibt top 105",                 bull.get(0).top, 105.0)
+    checkI("Tief 103 erreicht die Unterkante → geschlossen (1)", akj.fvgFill(bull, true, 103.0, 110.0, false, false), 1)
+    checkI("Liste danach leer",                               bull.size(), 0)
+    bear = fvgOne(97.0, 95.0, -1)
+    checkI("bärisch, Hoch 96 in der Lücke → nicht geschlossen", akj.fvgFill(bear, false, 90.0, 96.0, false, false), 0)
+    checkF("bärisch: bot bleibt 95",                          bear.get(0).bot, 95.0)
+    checkI("bärisch, Hoch 97 erreicht die Oberkante → geschlossen", akj.fvgFill(bear, false, 90.0, 97.0, false, false), 1)
 
-    // ── FVG: Füllen (Issue #36) – Default: nur Schließen bei kompletter Abdeckung, keine Verkleinerung ──
-    bullF = array.new<akj.Fvg>()
-    akj.fvgInsert(bullF, akj.Fvg.new(105.0, 103.0, 1, 1, 1, 0))
-    checkI("FVG fill: Tief 106 über dem FVG → nichts",                 akj.fvgFill(bullF, true, 106.0, 110.0, false, false), 0)
-    checkF("FVG fill: top unverändert 105",                           bullF.get(0).top, 105.0)
-    checkI("FVG fill: Tief 104 in der Lücke → nicht geschlossen (0)",  akj.fvgFill(bullF, true, 104.0, 110.0, false, false), 0)
-    checkF("FVG fill: ohne Teilfüllung bleibt top 105",                bullF.get(0).top, 105.0)
-    checkI("FVG fill: Tief 103 erreicht die Unterkante → geschlossen (1)", akj.fvgFill(bullF, true, 103.0, 110.0, false, false), 1)
-    checkI("FVG fill: Liste danach leer",                             bullF.size(), 0)
-    bearF = array.new<akj.Fvg>()
-    akj.fvgInsert(bearF, akj.Fvg.new(97.0, 95.0, -1, 1, 1, 0))
-    checkI("FVG fill: bärisch, Hoch 96 in der Lücke → nicht geschlossen", akj.fvgFill(bearF, false, 90.0, 96.0, false, false), 0)
-    checkF("FVG fill: bärisch bot bleibt 95",                         bearF.get(0).bot, 95.0)
-    checkI("FVG fill: bärisch, Hoch 97 erreicht die Oberkante → geschlossen", akj.fvgFill(bearF, false, 90.0, 97.0, false, false), 1)
+    // Mitte berührt (Consequent Encroachment); ohne mid zählt die Mitte des Rests.
+    bullC = fvgOne(105.0, 103.0, 1)
+    checkI("Mitte: Tief 104,5 über der Mitte → offen",        akj.fvgFill(bullC, true, 104.5, 110.0, false, true), 0)
+    checkI("Mitte: Tief 104 = Mitte → geschlossen",           akj.fvgFill(bullC, true, 104.0, 110.0, false, true), 1)
+    bearC = fvgOne(97.0, 95.0, -1)
+    checkI("Mitte: bärisch, Hoch 95,5 unter der Mitte → offen", akj.fvgFill(bearC, false, 90.0, 95.5, false, true), 0)
+    checkI("Mitte: bärisch, Hoch 96 = Mitte → geschlossen",   akj.fvgFill(bearC, false, 90.0, 96.0, false, true), 1)
 
-    // ── FVG: Füllen – Mitte berührt (Consequent Encroachment); ohne mid zählt die Mitte des Rests ──
-    bullC = array.new<akj.Fvg>()
-    akj.fvgInsert(bullC, akj.Fvg.new(105.0, 103.0, 1, 1, 1, 0))   // Mitte 104
-    checkI("FVG fill CE: Tief 104,5 über der Mitte → offen",          akj.fvgFill(bullC, true, 104.5, 110.0, false, true), 0)
-    checkI("FVG fill CE: Tief 104 = Mitte → geschlossen",             akj.fvgFill(bullC, true, 104.0, 110.0, false, true), 1)
-    bearC = array.new<akj.Fvg>()
-    akj.fvgInsert(bearC, akj.Fvg.new(97.0, 95.0, -1, 1, 1, 0))    // Mitte 96
-    checkI("FVG fill CE: bärisch, Hoch 95,5 unter der Mitte → offen",  akj.fvgFill(bearC, false, 90.0, 95.5, false, true), 0)
-    checkI("FVG fill CE: bärisch, Hoch 96 = Mitte → geschlossen",     akj.fvgFill(bearC, false, 90.0, 96.0, false, true), 1)
-
-    // ── FVG: Füllen – teilweise Füllung verkleinert den Rest (Verhalten bis v5) ──
-    bullT = array.new<akj.Fvg>()
-    akj.fvgInsert(bullT, akj.Fvg.new(105.0, 103.0, 1, 1, 1, 0))
-    checkI("FVG fill partial: Tief 104 → teilweise gefüllt (0)",      akj.fvgFill(bullT, true, 104.0, 110.0, true, false), 0)
-    checkF("FVG fill partial: Rest top = 104",                       bullT.get(0).top, 104.0)
-    checkF("FVG fill partial: Rest bot bleibt 103",                  bullT.get(0).bot, 103.0)
-    checkI("FVG fill partial: Tief 102 → komplett gefüllt (1)",       akj.fvgFill(bullT, true, 102.0, 110.0, true, false), 1)
-    bearT = array.new<akj.Fvg>()
-    akj.fvgInsert(bearT, akj.Fvg.new(97.0, 95.0, -1, 1, 1, 0))
-    checkI("FVG fill partial: bärisch, Hoch 96 → teilweise",          akj.fvgFill(bearT, false, 90.0, 96.0, true, false), 0)
-    checkF("FVG fill partial: bärisch Rest bot = 96",                bearT.get(0).bot, 96.0)
-    checkI("FVG fill partial: bärisch, Hoch 97 → komplett",           akj.fvgFill(bearT, false, 90.0, 97.0, true, false), 1)
-    bullM = array.new<akj.Fvg>()
-    akj.fvgInsert(bullM, akj.Fvg.new(105.0, 103.0, 1, 1, 1, 0))
+    // Teilweise Füllung verkleinert den Rest (Verhalten bis v5).
+    bullT = fvgOne(105.0, 103.0, 1)
+    checkI("Teilfüllung: Tief 104 → teilweise gefüllt (0)",   akj.fvgFill(bullT, true, 104.0, 110.0, true, false), 0)
+    checkF("Teilfüllung: Rest top = 104",                     bullT.get(0).top, 104.0)
+    checkF("Teilfüllung: Rest bot bleibt 103",                bullT.get(0).bot, 103.0)
+    checkI("Teilfüllung: Tief 102 → komplett gefüllt (1)",    akj.fvgFill(bullT, true, 102.0, 110.0, true, false), 1)
+    bearT = fvgOne(97.0, 95.0, -1)
+    checkI("Teilfüllung: bärisch, Hoch 96 → teilweise",       akj.fvgFill(bearT, false, 90.0, 96.0, true, false), 0)
+    checkF("Teilfüllung: bärisch Rest bot = 96",              bearT.get(0).bot, 96.0)
+    checkI("Teilfüllung: bärisch, Hoch 97 → komplett",        akj.fvgFill(bearT, false, 90.0, 97.0, true, false), 1)
+    bullM = fvgOne(105.0, 103.0, 1)
     akj.fvgInsert(bullM, akj.Fvg.new(110.0, 108.0, 1, 1, 2, 0))
-    checkI("FVG fill partial: Tief 104 füllt das obere komplett, das untere teilweise", akj.fvgFill(bullM, true, 104.0, 112.0, true, false), 1)
-    checkI("FVG fill partial: Liste danach 1",                       bullM.size(), 1)
-    checkF("FVG fill partial: verbleibender Rest top = 104",         bullM.get(0).top, 104.0)
+    checkI("Teilfüllung: Tief 104 füllt das obere komplett, das untere teilweise", akj.fvgFill(bullM, true, 104.0, 112.0, true, false), 1)
+    checkI("Teilfüllung: Liste danach 1",                     bullM.size(), 1)
+    checkF("Teilfüllung: verbleibender Rest top = 104",       bullM.get(0).top, 104.0)
 
-    // ── FVG: Teilfüllung + Mitte – es zählt die Mitte der URSPRÜNGLICHEN Lücke (mid aus fvgAdd) ──
-    bullY = array.new<akj.Fvg>()
-    bearY = array.new<akj.Fvg>()
-    qY    = array.new<akj.Fvg>()
-    akj.fvgAdd(bullY, bearY, qY, 1, 108.0, 105.0, 103.0, 101.0, 1000, 10)   // bullisch 103–105, Mitte 104
-    checkF("FVG add: mid = Mitte der Lücke 104",                     bullY.get(0).mid, 104.0)
-    checkI("FVG fill partial+CE: Tief 104,6 → verkleinert, offen",    akj.fvgFill(bullY, true, 104.6, 110.0, true, true), 0)
-    checkF("FVG fill partial+CE: Rest top = 104,6",                  bullY.get(0).top, 104.6)
-    checkI("FVG fill partial+CE: Tief 104,2 → Mitte 104 noch nicht erreicht", akj.fvgFill(bullY, true, 104.2, 110.0, true, true), 0)
-    checkI("FVG fill partial+CE: Tief 104 → geschlossen",            akj.fvgFill(bullY, true, 104.0, 110.0, true, true), 1)
+    // Teilfüllung + Mitte: Es zählt die Mitte der URSPRÜNGLICHEN Lücke (mid aus fvgAdd).
+    bullX = fvgNone()
+    bearX = fvgNone()
+    qX    = fvgNone()
+    akj.fvgAdd(bullX, bearX, qX, 1, 108.0, 105.0, 103.0, 101.0, 1000, 10)   // bullisch 103–105, Mitte 104
+    checkF("fvgAdd: mid = Mitte der Lücke 104",               bullX.get(0).mid, 104.0)
+    checkI("Teilfüllung + Mitte: Tief 104,6 → verkleinert, offen", akj.fvgFill(bullX, true, 104.6, 110.0, true, true), 0)
+    checkF("Teilfüllung + Mitte: Rest top = 104,6",           bullX.get(0).top, 104.6)
+    checkI("Teilfüllung + Mitte: Tief 104,2 → Mitte 104 noch nicht erreicht", akj.fvgFill(bullX, true, 104.2, 110.0, true, true), 0)
+    checkI("Teilfüllung + Mitte: Tief 104 → geschlossen",     akj.fvgFill(bullX, true, 104.0, 110.0, true, true), 1)
 
-    // ── FVG: Aufräumen ──
-    lstC = array.new<akj.Fvg>()
-    lstC.push(akj.Fvg.new(110.0, 109.0, 1, 1, 1, 0))
-    fMid = akj.Fvg.new(105.0, 104.0, 1, 1, 2, 0)
-    fMid.dead := true
-    lstC.push(fMid)
-    lstC.push(akj.Fvg.new(100.0, 99.0, 1, 1, 3, 0))
-    akj.fvgCompact(lstC)
-    checkI("FVG compact: erledigtes entfernt → 2",           lstC.size(), 2)
-    checkF("FVG compact: Reihenfolge bleibt (1.)",           lstC.get(0).top, 110.0)
-    checkF("FVG compact: Reihenfolge bleibt (2.)",           lstC.get(1).top, 100.0)
+// ═══════════════════════════════════════════════════════════════════
+// FVG AUFRÄUMEN (fvgCompact)
+// ═══════════════════════════════════════════════════════════════════
+testFvgAufraeumen() =>
+    beginGroup("FVG aufräumen")
+    l = fvgNone()
+    l.push(akj.Fvg.new(110.0, 109.0, 1, 1, 1, 0))
+    l.push(fvgDead(105.0, 104.0, 1, 2))
+    l.push(akj.Fvg.new(100.0, 99.0, 1, 1, 3, 0))
+    akj.fvgCompact(l)
+    checkI("erledigtes entfernt → 2",                         l.size(), 2)
+    checkF("Reihenfolge bleibt (1.)",                         l.get(0).top, 110.0)
+    checkF("Reihenfolge bleibt (2.)",                         l.get(1).top, 100.0)
 
-    // ── FVG: Treffer im Gewinnbereich [Entry, Ziel 1:1] ──
-    // Long: Entry 100, SL 95 → Zone 100–105. Short: Entry 100, SL 105 → Zone 95–100.
-    noBull = array.new<akj.Fvg>()
-    noBear = array.new<akj.Fvg>()
-    bearH  = array.new<akj.Fvg>()
-    akj.fvgInsert(bearH, akj.Fvg.new(104.0, 103.0, -1, 1, 1, 0))
-    checkI("FVG hit: Long, bärisch 103–104 in der Zone → Treffer", akj.fvgHit(noBull, bearH, 1, 100.0, 95.0) ? 1 : 0, 1)
-    checkI("FVG hit: kein Setup → kein Treffer",              akj.fvgHit(noBull, bearH, 0, 100.0, 95.0) ? 1 : 0, 0)
-    bearO  = array.new<akj.Fvg>()
-    akj.fvgInsert(bearO, akj.Fvg.new(108.0, 106.0, -1, 1, 1, 0))
-    checkI("FVG hit: Long, bärisch 106–108 über der Zone → kein Treffer", akj.fvgHit(noBull, bearO, 1, 100.0, 95.0) ? 1 : 0, 0)
-    bearB  = array.new<akj.Fvg>()
-    akj.fvgInsert(bearB, akj.Fvg.new(99.5, 98.0, -1, 1, 1, 0))
-    checkI("FVG hit: Long, bärisch 98–99,5 unter dem Entry → kein Treffer", akj.fvgHit(noBull, bearB, 1, 100.0, 95.0) ? 1 : 0, 0)
-    bearE  = array.new<akj.Fvg>()
-    akj.fvgInsert(bearE, akj.Fvg.new(106.0, 104.5, -1, 1, 1, 0))
-    checkI("FVG hit: Long, bärisch 104,5–106 ragt in die Zone → Treffer", akj.fvgHit(noBull, bearE, 1, 100.0, 95.0) ? 1 : 0, 1)
-    bearX  = array.new<akj.Fvg>()
-    akj.fvgInsert(bearX, akj.Fvg.new(106.0, 105.0, -1, 1, 1, 0))
-    checkI("FVG hit: Long, bärisch beginnt genau am Ziel 105 → kein Treffer", akj.fvgHit(noBull, bearX, 1, 100.0, 95.0) ? 1 : 0, 0)
-    bearD  = array.new<akj.Fvg>()
-    fD = akj.Fvg.new(104.0, 103.0, -1, 1, 1, 0)
-    fD.dead := true
-    akj.fvgInsert(bearD, fD)
-    checkI("FVG hit: erledigtes FVG zählt nicht",             akj.fvgHit(noBull, bearD, 1, 100.0, 95.0) ? 1 : 0, 0)
-    bullH  = array.new<akj.Fvg>()
-    akj.fvgInsert(bullH, akj.Fvg.new(97.0, 96.0, 1, 1, 1, 0))
-    checkI("FVG hit: Short, bullisch 96–97 in der Zone → Treffer", akj.fvgHit(bullH, noBear, -1, 100.0, 105.0) ? 1 : 0, 1)
-    checkI("FVG hit: Long sieht bullische FVGs nicht",        akj.fvgHit(bullH, noBear, 1, 100.0, 95.0) ? 1 : 0, 0)
-    bullO  = array.new<akj.Fvg>()
-    akj.fvgInsert(bullO, akj.Fvg.new(94.0, 93.0, 1, 1, 1, 0))
-    checkI("FVG hit: Short, bullisch 93–94 unter der Zone → kein Treffer", akj.fvgHit(bullO, noBear, -1, 100.0, 105.0) ? 1 : 0, 0)
-    bullP  = array.new<akj.Fvg>()
-    akj.fvgInsert(bullP, akj.Fvg.new(96.0, 90.0, 1, 1, 1, 0))
-    checkI("FVG hit: Short, bullisch 90–96 ragt in die Zone → Treffer", akj.fvgHit(bullP, noBear, -1, 100.0, 105.0) ? 1 : 0, 1)
+// ═══════════════════════════════════════════════════════════════════
+// FVG TREFFER im Gewinnbereich [Entry, Ziel 1:1] (fvgHit)
+// Long: Entry 100, SL 95 → Zone 100–105. Short: Entry 100, SL 105 → Zone 95–100.
+// ═══════════════════════════════════════════════════════════════════
+testFvgTreffer() =>
+    beginGroup("FVG Treffer")
+    none = fvgNone()
+    checkB("Long, bärisch 103–104 in der Zone → Treffer",     akj.fvgHit(none, fvgOne(104.0, 103.0, -1), 1, 100.0, 95.0), true)
+    checkB("kein Setup → kein Treffer",                       akj.fvgHit(none, fvgOne(104.0, 103.0, -1), 0, 100.0, 95.0), false)
+    checkB("Long, bärisch 106–108 über der Zone → kein Treffer", akj.fvgHit(none, fvgOne(108.0, 106.0, -1), 1, 100.0, 95.0), false)
+    checkB("Long, bärisch 98–99,5 unter dem Entry → kein Treffer", akj.fvgHit(none, fvgOne(99.5, 98.0, -1), 1, 100.0, 95.0), false)
+    checkB("Long, bärisch 104,5–106 ragt in die Zone → Treffer", akj.fvgHit(none, fvgOne(106.0, 104.5, -1), 1, 100.0, 95.0), true)
+    checkB("Long, bärisch beginnt genau am Ziel 105 → kein Treffer", akj.fvgHit(none, fvgOne(106.0, 105.0, -1), 1, 100.0, 95.0), false)
+    dead = fvgNone()
+    akj.fvgInsert(dead, fvgDead(104.0, 103.0, -1, 1))
+    checkB("erledigtes FVG zählt nicht",                      akj.fvgHit(none, dead, 1, 100.0, 95.0), false)
+    checkB("Short, bullisch 96–97 in der Zone → Treffer",     akj.fvgHit(fvgOne(97.0, 96.0, 1), none, -1, 100.0, 105.0), true)
+    checkB("Long sieht bullische FVGs nicht",                 akj.fvgHit(fvgOne(97.0, 96.0, 1), none, 1, 100.0, 95.0), false)
+    checkB("Short, bullisch 93–94 unter der Zone → kein Treffer", akj.fvgHit(fvgOne(94.0, 93.0, 1), none, -1, 100.0, 105.0), false)
+    checkB("Short, bullisch 90–96 ragt in die Zone → Treffer", akj.fvgHit(fvgOne(96.0, 90.0, 1), none, -1, 100.0, 105.0), true)
 
-    // ── Setup-Verfall ──
-    checkB("Verfall: 10 Kerzen nach Start bei Grenze 10 → verfallen", akj.setupExpired(100, 90, 10), true)
-    checkB("Verfall: 9 Kerzen nach Start bei Grenze 10 → nicht",     akj.setupExpired(99, 90, 10), false)
-    checkB("Verfall: Grenze 0 = nie",                                 akj.setupExpired(1000, 0, 0), false)
+// ═══════════════════════════════════════════════════════════════════
+// SETUP-VERFALL (setupExpired)
+// ═══════════════════════════════════════════════════════════════════
+testVerfall() =>
+    beginGroup("Setup-Verfall")
+    checkB("10 Kerzen nach Start bei Grenze 10 → verfallen",  akj.setupExpired(100, 90, 10), true)
+    checkB("9 Kerzen nach Start bei Grenze 10 → nicht",       akj.setupExpired(99, 90, 10), false)
+    checkB("Grenze 0 = nie",                                  akj.setupExpired(1000, 0, 0), false)
 
-    // ── Kalendertage / Earnings-Fenster (Issue #1) ──
-    DAY = 86400000
-    NY  = "America/New_York"
+// ═══════════════════════════════════════════════════════════════════
+// KALENDERTAGE UND EARNINGS-FENSTER (Issue #1: dayOf, earnDay, inEarnWin)
+// ═══════════════════════════════════════════════════════════════════
+testKalender() =>
+    beginGroup("Kalender & Earnings")
+    DAY   = 86400000
+    NY    = "America/New_York"
     d1110 = timestamp("UTC", 2026, 11, 10, 0, 0)
-    checkI("dayOf: 10.11. 14:30 UTC = 09:30 New York → 10.11.",      akj.dayOf(timestamp("UTC", 2026, 11, 10, 14, 30), NY), d1110)
+    checkI("dayOf: 10.11. 14:30 UTC = 09:30 New York → 10.11.", akj.dayOf(timestamp("UTC", 2026, 11, 10, 14, 30), NY), d1110)
     checkI("dayOf: 10.11. 02:00 UTC = 09.11. 21:00 New York → 09.11.", akj.dayOf(timestamp("UTC", 2026, 11, 10, 2, 0), NY), d1110 - DAY)
-    checkI("dayOf: Mitternacht UTC bleibt derselbe Tag in UTC",       akj.dayOf(d1110, "UTC"), d1110)
-    checkI("earnDay: Termin 10.11. 21:05 UTC → 10.11. 00:00 UTC",     akj.earnDay(timestamp("UTC", 2026, 11, 10, 21, 5)), d1110)
-    checkI("earnDay: reines Datum (Mitternacht UTC) bleibt",          akj.earnDay(d1110), d1110)
-    checkB("earnDay: ohne Termin na",                                 na(akj.earnDay(int(na))), true)
+    checkI("dayOf: Mitternacht UTC bleibt derselbe Tag in UTC", akj.dayOf(d1110, "UTC"), d1110)
+    checkI("earnDay: Termin 10.11. 21:05 UTC → 10.11. 00:00 UTC", akj.earnDay(timestamp("UTC", 2026, 11, 10, 21, 5)), d1110)
+    checkI("earnDay: reines Datum (Mitternacht UTC) bleibt",  akj.earnDay(d1110), d1110)
+    checkB("earnDay: ohne Termin na",                         na(akj.earnDay(int(na))), true)
+    // Sperrfenster 8 Tage vor dem Earnings-Tag (Dienstag, 10.11.) bis zum Earnings-Tag.
     win = 8 * DAY
-    checkB("Earnings-Fenster: Tag 02.11. = genau 8 Tage vorher → drin", akj.inEarnWin(d1110 - 8 * DAY, d1110 - 8 * DAY, d1110, win), true)
-    checkB("Earnings-Fenster: Tag 01.11. = 9 Tage vorher → draußen",   akj.inEarnWin(d1110 - 9 * DAY, d1110 - 9 * DAY, d1110, win), false)
-    checkB("Earnings-Fenster: Earnings-Tag selbst → drin",             akj.inEarnWin(d1110, d1110, d1110, win), true)
-    checkB("Earnings-Fenster: Tag danach → draußen",                   akj.inEarnWin(d1110 + DAY, d1110 + DAY, d1110, win), false)
-    checkB("Earnings-Fenster: Woche 26.–30.10. → draußen",             akj.inEarnWin(d1110 - 15 * DAY, d1110 - 11 * DAY, d1110, win), false)
-    checkB("Earnings-Fenster: Woche 02.–06.11. → drin",                akj.inEarnWin(d1110 - 8 * DAY, d1110 - 4 * DAY, d1110, win), true)
-    checkB("Earnings-Fenster: Woche 09.–13.11. (Termin Di) → drin",    akj.inEarnWin(d1110 - DAY, d1110 + 3 * DAY, d1110, win), true)
-    checkB("Earnings-Fenster: Woche 16.–20.11. → draußen",             akj.inEarnWin(d1110 + 6 * DAY, d1110 + 10 * DAY, d1110, win), false)
-    checkB("Earnings-Fenster: ohne Termin → draußen",                  akj.inEarnWin(d1110, d1110, int(na), win), false)
-    checkB("Earnings-Fenster: Fenster 0 Tage → nur der Earnings-Tag",  akj.inEarnWin(d1110 - DAY, d1110 - DAY, d1110, 0), false)
+    checkB("Tag 02.11. = genau 8 Tage vorher → drin",         akj.inEarnWin(d1110 - 8 * DAY, d1110 - 8 * DAY, d1110, win), true)
+    checkB("Tag 01.11. = 9 Tage vorher → draußen",            akj.inEarnWin(d1110 - 9 * DAY, d1110 - 9 * DAY, d1110, win), false)
+    checkB("Earnings-Tag selbst → drin",                      akj.inEarnWin(d1110, d1110, d1110, win), true)
+    checkB("Tag danach → draußen",                            akj.inEarnWin(d1110 + DAY, d1110 + DAY, d1110, win), false)
+    checkB("Woche 26.–30.10. → draußen",                      akj.inEarnWin(d1110 - 15 * DAY, d1110 - 11 * DAY, d1110, win), false)
+    checkB("Woche 02.–06.11. → drin",                         akj.inEarnWin(d1110 - 8 * DAY, d1110 - 4 * DAY, d1110, win), true)
+    checkB("Woche 09.–13.11. (Termin Di) → drin",             akj.inEarnWin(d1110 - DAY, d1110 + 3 * DAY, d1110, win), true)
+    checkB("Woche 16.–20.11. → draußen",                      akj.inEarnWin(d1110 + 6 * DAY, d1110 + 10 * DAY, d1110, win), false)
+    checkB("ohne Termin → draußen",                           akj.inEarnWin(d1110, d1110, int(na), win), false)
+    checkB("Fenster 0 Tage → nur der Earnings-Tag",           akj.inEarnWin(d1110 - DAY, d1110 - DAY, d1110, 0), false)
 
-    // ── Sektor-ETF ──
-    checkS("Sektor-ETF: Utilities → XLU",                             akj.sectorEtf("Utilities", "Electric Utilities"), "XLU")
-    checkS("Sektor-ETF: Finance → XLF",                               akj.sectorEtf("Finance", "Regional Banks"), "XLF")
-    checkS("Sektor-ETF: REIT (Industrie) → XLRE vor Finance",         akj.sectorEtf("Finance", "Real Estate Investment Trusts"), "XLRE")
-    checkS("Sektor-ETF: Internet-Dienste → XLC vor Technology Services", akj.sectorEtf("Technology Services", "Internet Software/Services"), "XLC")
-    checkS("Sektor-ETF: Discounter → XLP vor Retail Trade",           akj.sectorEtf("Retail Trade", "Discount Stores"), "XLP")
-    checkS("Sektor-ETF: Retail Trade sonst → XLY",                    akj.sectorEtf("Retail Trade", "Specialty Stores"), "XLY")
-    checkS("Sektor-ETF: ETF/Fonds → –",                               akj.sectorEtf("Miscellaneous", "Investment Trusts/Mutual Funds"), "–")
-    checkS("Sektor-ETF: leer → –",                                    akj.sectorEtf("", ""), "–")
+// ═══════════════════════════════════════════════════════════════════
+// SEKTOR-ETF (sectorEtf: TradingView-Sektor + Industrie → SPDR-ETF)
+// ═══════════════════════════════════════════════════════════════════
+testSektor() =>
+    beginGroup("Sektor-ETF")
+    checkS("Utilities → XLU",                                 akj.sectorEtf("Utilities", "Electric Utilities"), "XLU")
+    checkS("Finance → XLF",                                   akj.sectorEtf("Finance", "Regional Banks"), "XLF")
+    checkS("REIT (Industrie) → XLRE vor Finance",             akj.sectorEtf("Finance", "Real Estate Investment Trusts"), "XLRE")
+    checkS("Internet-Dienste → XLC vor Technology Services",  akj.sectorEtf("Technology Services", "Internet Software/Services"), "XLC")
+    checkS("Discounter → XLP vor Retail Trade",               akj.sectorEtf("Retail Trade", "Discount Stores"), "XLP")
+    checkS("Retail Trade sonst → XLY",                        akj.sectorEtf("Retail Trade", "Specialty Stores"), "XLY")
+    checkS("ETF/Fonds → –",                                   akj.sectorEtf("Miscellaneous", "Investment Trusts/Mutual Funds"), "–")
+    checkS("leer → –",                                        akj.sectorEtf("", ""), "–")
 
-    // ── Setup-Zustandsautomat: Long, Kerzenfolge ──
+// ═══════════════════════════════════════════════════════════════════
+// SETUP LONG – eine Kerzenfolge (setupStep über stepL; Puffer 3 Ticks bzw. 0,3 ‰, glatte Zahlen gemieden)
+//   Zustand  Kerze  Open   High   Low    Close  %R   Bedeutung
+//   s1       10     100,0  101,0  99,0   99,5   −85  Signalkerze: rot, %R ≤ −80
+//   s2       11     99,6   100,8  99,2   100,2  −50  grün, kein neues Tief
+//   s3       12     100,0  100,5  98,5   100,3  −50  grün, neues Tief → SL zieht nach
+//   s4       13     100,2  100,6  99,0   99,4   −40  Downday → Entry zieht nach (%R egal)
+//   s5       14     99,5   100,5  99,3   100,4  −30  Hoch unter dem Entry
+//   s6       15     100,4  100,7  100,0  100,5  −20  Hoch ≥ Entry → Entry erreicht
+//   s6b      15     100,8  100,9  99,0   99,2   −85  statt s6: Entry-Kerze, zugleich Signalkerze
+//   s7       16     100,5  100,9  99,8   100,0  −85  nach dem Entry (ab s6): neues Setup
+// ═══════════════════════════════════════════════════════════════════
+testSetupLong() =>
+    beginGroup("Setup Long")
     s0 = akj.Setup.new()
-    checkI("Setup: Anfangszustand kein Setup",                         s0.dir, 0)
-    s1 = stepL(s0, 100.0, 101.0, 99.0, 99.5, -85.0, 10)              // Signalkerze: rot, %R −85
-    checkB("Setup: Signalkerze → neues Setup",                         s1.isNew, true)
-    checkI("Setup: Richtung Long",                                     s1.dir, 1)
-    checkI("Setup: Startkerze 10",                                     s1.startBar, 10)
-    checkF("Setup: Entry = Hoch 101 + Puffer (0,3 ‰ → 0,04) → 101,04",  s1.entry, 101.04)
-    checkF("Setup: SL = Tief 99 − Puffer → 98,97",                     s1.sl, 98.97)
-    checkI("Setup: Entry nicht erreicht",                              s1.trigDir, 0)
-    checkI("Setup: Eingabe bleibt unverändert (Kopie)",                s0.dir, 0)
-    s2 = stepL(s1, 99.6, 100.8, 99.2, 100.2, -50.0, 11)              // grün, kein neues Tief
-    checkB("Setup: grüne Kerze → kein neues Setup",                    s2.isNew, false)
-    checkB("Setup: grüne Kerze → nicht nachgezogen",                   s2.moved, false)
-    checkI("Setup: bleibt offen",                                      s2.dir, 1)
-    checkF("Setup: Entry bleibt 101,04",                               s2.entry, 101.04)
-    checkF("Setup: SL bleibt 98,97 (kein neues Tief)",                 s2.sl, 98.97)
-    s3 = stepL(s2, 100.0, 100.5, 98.5, 100.3, -50.0, 12)             // grün, neues Tief 98,5
-    checkF("Setup: neues Tief zieht SL nach → 98,47",                  s3.sl, 98.47)
-    checkF("Setup: Entry bleibt bei grüner Kerze",                     s3.entry, 101.04)
-    checkB("Setup: SL-Nachziehen ist kein Nachzieh-Ereignis",          s3.moved, false)
-    s4 = stepL(s3, 100.2, 100.6, 99.0, 99.4, -40.0, 13)              // Downday, %R egal
-    checkB("Setup: Downday → nachgezogen",                             s4.moved, true)
-    checkB("Setup: Nachziehen ist kein neues Setup",                   s4.isNew, false)
-    checkF("Setup: Entry nachgezogen auf Hoch 100,6 + Puffer → 100,64", s4.entry, 100.64)
-    checkF("Setup: SL wandert nie zurück → 98,47",                     s4.sl, 98.47)
-    checkI("Setup: Startkerze bleibt 10",                              s4.startBar, 10)
-    s5 = stepL(s4, 99.5, 100.5, 99.3, 100.4, -30.0, 14)              // Hoch unter dem Entry
-    checkI("Setup: Hoch 100,5 < Entry 100,64 → bleibt offen",          s5.dir, 1)
-    checkI("Setup: kein Entry-Ereignis",                               s5.trigDir, 0)
-    s6 = stepL(s5, 100.4, 100.7, 100.0, 100.5, -20.0, 15)            // Hoch ≥ Entry
-    checkI("Setup: Hoch ≥ Entry → Entry erreicht (Long)",              s6.trigDir, 1)
-    checkI("Setup: danach kein Setup",                                 s6.dir, 0)
-    checkF("Setup: Entry bleibt für die Darstellung stehen",           s6.entry, 100.64)
-    checkF("Setup: SL bleibt für die Darstellung stehen",              s6.sl, 98.47)
-    s6b = stepL(s5, 100.8, 100.9, 99.0, 99.2, -85.0, 15)             // Entry-Kerze, zugleich rot mit %R −85
-    checkI("Setup: Entry-Kerze → Entry erreicht",                      s6b.trigDir, 1)
-    checkB("Setup: Entry-Kerze erzeugt kein neues Setup",              s6b.isNew, false)
-    s7 = stepL(s6, 100.5, 100.9, 99.8, 100.0, -85.0, 16)             // Folgekerze: rot, %R −85
-    checkB("Setup: nach dem Entry wieder neues Setup möglich",         s7.isNew, true)
-    checkI("Setup: neue Startkerze 16",                                s7.startBar, 16)
-    checkF("Setup: neuer Entry 100,94",                                s7.entry, 100.94)
-    checkF("Setup: neuer SL 99,77",                                    s7.sl, 99.77)
+    checkI("Anfangszustand → kein Setup",                     s0.dir, 0)
+    s1 = stepL(s0, 100.0, 101.0, 99.0, 99.5, -85.0, 10)
+    checkB("Signalkerze → neues Setup",                       s1.isNew, true)
+    checkI("Richtung Long",                                   s1.dir, 1)
+    checkI("Startkerze 10",                                   s1.startBar, 10)
+    checkF("Entry = Hoch 101 + Puffer (0,3 ‰ → 0,04) → 101,04", s1.entry, 101.04)
+    checkF("SL = Tief 99 − Puffer → 98,97",                   s1.sl, 98.97)
+    checkI("Entry nicht erreicht",                            s1.trigDir, 0)
+    checkI("Eingabe bleibt unverändert (Kopie)",              s0.dir, 0)
+    s2 = stepL(s1, 99.6, 100.8, 99.2, 100.2, -50.0, 11)
+    checkB("grüne Kerze → kein neues Setup",                  s2.isNew, false)
+    checkB("grüne Kerze → nicht nachgezogen",                 s2.moved, false)
+    checkI("bleibt offen",                                    s2.dir, 1)
+    checkF("Entry bleibt 101,04",                             s2.entry, 101.04)
+    checkF("SL bleibt 98,97 (kein neues Tief)",               s2.sl, 98.97)
+    s3 = stepL(s2, 100.0, 100.5, 98.5, 100.3, -50.0, 12)
+    checkF("neues Tief zieht SL nach → 98,47",                s3.sl, 98.47)
+    checkF("Entry bleibt bei grüner Kerze",                   s3.entry, 101.04)
+    checkB("SL-Nachziehen ist kein Nachzieh-Ereignis",        s3.moved, false)
+    s4 = stepL(s3, 100.2, 100.6, 99.0, 99.4, -40.0, 13)
+    checkB("Downday → nachgezogen",                           s4.moved, true)
+    checkB("Nachziehen ist kein neues Setup",                 s4.isNew, false)
+    checkF("Entry nachgezogen auf Hoch 100,6 + Puffer → 100,64", s4.entry, 100.64)
+    checkF("SL wandert nie zurück → 98,47",                   s4.sl, 98.47)
+    checkI("Startkerze bleibt 10",                            s4.startBar, 10)
+    s5 = stepL(s4, 99.5, 100.5, 99.3, 100.4, -30.0, 14)
+    checkI("Hoch 100,5 < Entry 100,64 → bleibt offen",        s5.dir, 1)
+    checkI("kein Entry-Ereignis",                             s5.trigDir, 0)
+    s6 = stepL(s5, 100.4, 100.7, 100.0, 100.5, -20.0, 15)
+    checkI("Hoch ≥ Entry → Entry erreicht (Long)",            s6.trigDir, 1)
+    checkI("danach kein Setup",                               s6.dir, 0)
+    checkF("Entry bleibt für die Darstellung stehen",         s6.entry, 100.64)
+    checkF("SL bleibt für die Darstellung stehen",            s6.sl, 98.47)
+    s6b = stepL(s5, 100.8, 100.9, 99.0, 99.2, -85.0, 15)
+    checkI("Entry-Kerze → Entry erreicht",                    s6b.trigDir, 1)
+    checkB("Entry-Kerze erzeugt kein neues Setup",            s6b.isNew, false)
+    s7 = stepL(s6, 100.5, 100.9, 99.8, 100.0, -85.0, 16)
+    checkB("nach dem Entry wieder neues Setup möglich",       s7.isNew, true)
+    checkI("neue Startkerze 16",                              s7.startBar, 16)
+    checkF("neuer Entry 100,94",                              s7.entry, 100.94)
+    checkF("neuer SL 99,77",                                  s7.sl, 99.77)
 
-    // ── Setup: Signalbedingungen ──
-    checkB("Signal: grüne Kerze mit %R −85 → kein Long",               stepL(s0, 100.0, 101.0, 99.0, 100.5, -85.0, 20).isNew, false)
-    checkB("Signal: rote Kerze mit %R −79 → kein Long",                stepL(s0, 100.0, 101.0, 99.0, 99.5, -79.0, 20).isNew, false)
-    checkB("Signal: %R genau −80 zählt (≤)",                           stepL(s0, 100.0, 101.0, 99.0, 99.5, -80.0, 20).isNew, true)
-    checkB("Signal: Doji (Close = Open) → kein Long",                  stepL(s0, 100.0, 101.0, 99.0, 100.0, -85.0, 20).isNew, false)
-    checkB("Signal: Trigger aus → kein Setup",                         akj.setupStep(s0, R, 100.0, 101.0, 99.0, 99.5, -85.0, 20, true, true, false, false, false, false, false).isNew, false)
-    checkB("Signal: Close ist Gegentrigger (longNext aus) → kein Setup", akj.setupStep(s0, R, 100.0, 101.0, 99.0, 99.5, -85.0, 20, true, true, true, false, false, false, false).isNew, false)
-    checkB("Signal: Short-Trigger bei roter Kerze → kein Setup",       stepS(s0, 100.0, 101.0, 99.0, 99.5, -85.0, 20).dir == 0, true)
-    checkB("Signal: Earnings-Sperre → kein Setup",                     akj.setupStep(s0, R, 100.0, 101.0, 99.0, 99.5, -85.0, 20, true, true, true, false, true, false, true).isNew, false)
-    checkB("Signal: nicht erlaubt (Chart/Zeitraum) → kein Setup",      akj.setupStep(s0, R, 100.0, 101.0, 99.0, 99.5, -85.0, 20, true, false, true, false, true, false, false).isNew, false)
-    checkB("Signal: laufende Kerze → kein Setup",                      akj.setupStep(s0, R, 100.0, 101.0, 99.0, 99.5, -85.0, 20, false, true, true, false, true, false, false).isNew, false)
-    Rn = akj.Rules.new(allowLong = false)
-    checkB("Signal: Long-Setups abgeschaltet → kein Setup",            akj.setupStep(s0, Rn, 100.0, 101.0, 99.0, 99.5, -85.0, 20, true, true, true, false, true, false, false).isNew, false)
+// ═══════════════════════════════════════════════════════════════════
+// SETUP SIGNAL – wann entsteht ein Setup? (Signalkerze wie s1 oben, jeweils eine Bedingung verletzt)
+// ═══════════════════════════════════════════════════════════════════
+testSetupSignal() =>
+    beginGroup("Setup Signal")
+    s0 = akj.Setup.new()
+    checkB("grüne Kerze mit %R −85 → kein Long",              stepL(s0, 100.0, 101.0, 99.0, 100.5, -85.0, 20).isNew, false)
+    checkB("rote Kerze mit %R −79 → kein Long",               stepL(s0, 100.0, 101.0, 99.0, 99.5, -79.0, 20).isNew, false)
+    checkB("%R genau −80 zählt (≤)",                          stepL(s0, 100.0, 101.0, 99.0, 99.5, -80.0, 20).isNew, true)
+    checkB("Doji (Close = Open) → kein Long",                 stepL(s0, 100.0, 101.0, 99.0, 100.0, -85.0, 20).isNew, false)
+    checkB("Trigger aus → kein Setup",                        akj.setupStep(s0, R, 100.0, 101.0, 99.0, 99.5, -85.0, 20, true, true, false, false, false, false, false).isNew, false)
+    checkB("Close ist Gegentrigger (longNext aus) → kein Setup", akj.setupStep(s0, R, 100.0, 101.0, 99.0, 99.5, -85.0, 20, true, true, true, false, false, false, false).isNew, false)
+    checkB("Short-Trigger bei roter Kerze → kein Setup",      stepS(s0, 100.0, 101.0, 99.0, 99.5, -85.0, 20).dir == 0, true)
+    checkB("Earnings-Sperre → kein Setup",                    akj.setupStep(s0, R, 100.0, 101.0, 99.0, 99.5, -85.0, 20, true, true, true, false, true, false, true).isNew, false)
+    checkB("nicht erlaubt (Chart/Zeitraum) → kein Setup",     akj.setupStep(s0, R, 100.0, 101.0, 99.0, 99.5, -85.0, 20, true, false, true, false, true, false, false).isNew, false)
+    checkB("laufende Kerze → kein Setup",                     akj.setupStep(s0, R, 100.0, 101.0, 99.0, 99.5, -85.0, 20, false, true, true, false, true, false, false).isNew, false)
+    checkB("Long-Setups abgeschaltet → kein Setup",           akj.setupStep(s0, akj.Rules.new(allowLong = false), 100.0, 101.0, 99.0, 99.5, -85.0, 20, true, true, true, false, true, false, false).isNew, false)
 
-    // ── Setup: Abbruch (jeweils ab dem offenen Setup s1) ──
+// ═══════════════════════════════════════════════════════════════════
+// SETUP ABBRUCH – Long (jeweils ab dem offenen Setup s1 aus SETUP LONG: Entry 101,04, SL 98,97)
+// ═══════════════════════════════════════════════════════════════════
+testSetupAbbruch() =>
+    beginGroup("Setup Abbruch")
+    s1 = stepL(akj.Setup.new(), 100.0, 101.0, 99.0, 99.5, -85.0, 10)
     sA = akj.setupStep(s1, R, 99.4, 100.0, 98.8, 99.0, -60.0, 11, true, true, false, false, false, false, false)
-    checkI("Abbruch: Trigger weg → kein Setup",                        sA.dir, 0)
-    checkI("Abbruch: Trigger weg ist kein Entry-Ereignis",             sA.trigDir, 0)
-    sB = akj.setupStep(s1, R, 99.4, 100.0, 98.8, 99.0, -60.0, 11, true, true, true, false, true, false, true)
-    checkI("Abbruch: Earnings-Sperre → kein Setup",                    sB.dir, 0)
-    sC = akj.setupStep(s1, R, 99.4, 100.0, 98.8, 99.0, -60.0, 11, true, true, true, false, false, false, false)
-    checkI("Abbruch: Close ist Gegentrigger → endet sofort",           sC.dir, 0)
-    sC2 = akj.setupStep(s1, R, 99.4, 100.0, 98.8, 99.0, -85.0, 11, true, true, true, false, false, false, false)
-    checkB("Abbruch: Gegentrigger-Kerze erzeugt kein neues Setup",     sC2.isNew, false)
-    Re = akj.Rules.new(expiryBars = 2)
+    checkI("Trigger weg → kein Setup",                        sA.dir, 0)
+    checkI("Trigger weg ist kein Entry-Ereignis",             sA.trigDir, 0)
+    checkI("Earnings-Sperre → kein Setup",                    akj.setupStep(s1, R, 99.4, 100.0, 98.8, 99.0, -60.0, 11, true, true, true, false, true, false, true).dir, 0)
+    checkI("Close ist Gegentrigger → endet sofort",           akj.setupStep(s1, R, 99.4, 100.0, 98.8, 99.0, -60.0, 11, true, true, true, false, false, false, false).dir, 0)
+    checkB("Gegentrigger-Kerze erzeugt kein neues Setup",     akj.setupStep(s1, R, 99.4, 100.0, 98.8, 99.0, -85.0, 11, true, true, true, false, false, false, false).isNew, false)
+    Re  = akj.Rules.new(expiryBars = 2)
     sE1 = akj.setupStep(s1, Re, 99.6, 100.5, 99.2, 100.2, -50.0, 11, true, true, true, false, true, false, false)
-    checkI("Verfall: 1 Kerze nach Start, Grenze 2 → offen",            sE1.dir, 1)
+    checkI("Verfall: 1 Kerze nach Start, Grenze 2 → offen",   sE1.dir, 1)
     sE2 = akj.setupStep(sE1, Re, 99.6, 100.5, 99.2, 100.2, -50.0, 12, true, true, true, false, true, false, false)
-    checkI("Verfall: 2 Kerzen nach Start, Grenze 2 → verfallen",       sE2.dir, 0)
-    sD = akj.setupStep(s1, R, 100.5, 101.5, 100.0, 101.2, -10.0, 11, true, true, false, false, false, false, false)
-    checkI("Abbruch: Trigger weg geht vor Entry (Order wäre gelöscht)", sD.trigDir, 0)
-    sI = akj.setupStep(s1, R, 100.5, 101.5, 100.0, 101.2, -10.0, 11, false, true, true, false, true, false, false)
-    checkI("Intrabar: Hoch ≥ Entry → Entry auch auf laufender Kerze erreicht", sI.trigDir, 1)
+    checkI("Verfall: 2 Kerzen nach Start, Grenze 2 → verfallen", sE2.dir, 0)
+    checkI("Trigger weg geht vor Entry (Order wäre gelöscht)", akj.setupStep(s1, R, 100.5, 101.5, 100.0, 101.2, -10.0, 11, true, true, false, false, false, false, false).trigDir, 0)
+    checkI("laufende Kerze: Hoch ≥ Entry → Entry auch dort erreicht", akj.setupStep(s1, R, 100.5, 101.5, 100.0, 101.2, -10.0, 11, false, true, true, false, true, false, false).trigDir, 1)
 
-    // ── Setup-Zustandsautomat: Short (spiegelbildlich) ──
-    t1 = stepS(s0, 100.0, 101.0, 99.5, 100.8, -15.0, 30)             // Signalkerze: grün, %R −15
-    checkB("Short: grüne Kerze, %R −15 → neues Setup",                 t1.isNew, true)
-    checkI("Short: Richtung −1",                                       t1.dir, -1)
-    checkF("Short: Entry = Tief 99,5 − Puffer → 99,47",                t1.entry, 99.47)
-    checkF("Short: SL = Hoch 101 + Puffer (0,3 ‰ → 0,04) → 101,04",     t1.sl, 101.04)
-    checkB("Short: %R −21 → kein Setup",                               stepS(s0, 100.0, 101.0, 99.5, 100.8, -21.0, 30).isNew, false)
-    checkB("Short: %R genau −20 zählt (≥)",                            stepS(s0, 100.0, 101.0, 99.5, 100.8, -20.0, 30).isNew, true)
-    t2 = stepS(t1, 100.5, 101.5, 100.0, 101.2, -10.0, 31)            // Upday → nachziehen
-    checkB("Short: Upday → nachgezogen",                               t2.moved, true)
-    checkF("Short: Entry nachgezogen auf Tief 100 − Puffer → 99,97",   t2.entry, 99.97)
-    checkF("Short: SL folgt neuem Hoch → 101,54",                      t2.sl, 101.54)
-    t3 = stepS(t2, 101.0, 101.2, 100.5, 100.6, -40.0, 32)            // rot: Entry bleibt, kein neues Hoch
-    checkB("Short: rote Kerze → nicht nachgezogen",                    t3.moved, false)
-    checkF("Short: Entry bleibt 99,97",                                t3.entry, 99.97)
-    checkF("Short: SL bleibt 101,54",                                  t3.sl, 101.54)
-    t4 = stepS(t3, 100.5, 100.8, 99.9, 100.1, -50.0, 33)             // Tief ≤ Entry
-    checkI("Short: Tief ≤ Entry → Entry erreicht (Short)",             t4.trigDir, -1)
-    checkI("Short: danach kein Setup",                                 t4.dir, 0)
+// ═══════════════════════════════════════════════════════════════════
+// SETUP SHORT – spiegelbildliche Kerzenfolge (stepS)
+//   Zustand  Kerze  Open   High   Low    Close  %R   Bedeutung
+//   t1       30     100,0  101,0  99,5   100,8  −15  Signalkerze: grün, %R ≥ −20
+//   t2       31     100,5  101,5  100,0  101,2  −10  Upday → Entry zieht nach, neues Hoch → SL
+//   t3       32     101,0  101,2  100,5  100,6  −40  rot, kein neues Hoch
+//   t4       33     100,5  100,8  99,9   100,1  −50  Tief ≤ Entry → Entry erreicht
+// ═══════════════════════════════════════════════════════════════════
+testSetupShort() =>
+    beginGroup("Setup Short")
+    s0 = akj.Setup.new()
+    t1 = stepS(s0, 100.0, 101.0, 99.5, 100.8, -15.0, 30)
+    checkB("grüne Kerze, %R −15 → neues Setup",               t1.isNew, true)
+    checkI("Richtung −1",                                     t1.dir, -1)
+    checkF("Entry = Tief 99,5 − Puffer → 99,47",              t1.entry, 99.47)
+    checkF("SL = Hoch 101 + Puffer (0,3 ‰ → 0,04) → 101,04",  t1.sl, 101.04)
+    checkB("%R −21 → kein Setup",                             stepS(s0, 100.0, 101.0, 99.5, 100.8, -21.0, 30).isNew, false)
+    checkB("%R genau −20 zählt (≥)",                          stepS(s0, 100.0, 101.0, 99.5, 100.8, -20.0, 30).isNew, true)
+    t2 = stepS(t1, 100.5, 101.5, 100.0, 101.2, -10.0, 31)
+    checkB("Upday → nachgezogen",                             t2.moved, true)
+    checkF("Entry nachgezogen auf Tief 100 − Puffer → 99,97", t2.entry, 99.97)
+    checkF("SL folgt neuem Hoch → 101,54",                    t2.sl, 101.54)
+    t3 = stepS(t2, 101.0, 101.2, 100.5, 100.6, -40.0, 32)
+    checkB("rote Kerze → nicht nachgezogen",                  t3.moved, false)
+    checkF("Entry bleibt 99,97",                              t3.entry, 99.97)
+    checkF("SL bleibt 101,54",                                t3.sl, 101.54)
+    t4 = stepS(t3, 100.5, 100.8, 99.9, 100.1, -50.0, 33)
+    checkI("Tief ≤ Entry → Entry erreicht (Short)",           t4.trigDir, -1)
+    checkI("danach kein Setup",                               t4.dir, 0)
 
-    // ── Risiko und Level nach Regeln ──
-    checkF("Risiko: Entry 100, SL 95 → 5 %",                           akj.riskPct(100.0, 95.0), 5.0)
-    checkF("Risiko: Short Entry 100, SL 105 → 5 %",                    akj.riskPct(100.0, 105.0), 5.0)
-    checkF("Risiko: Entry 200, SL 196 → 2 %",                          akj.riskPct(200.0, 196.0), 2.0)
-    checkF("Level nach Regeln entspricht bufLevel (49,95 → 50,03)",    akj.setupLevel(R, 49.95, 1), 50.03)
+// ═══════════════════════════════════════════════════════════════════
+// RISIKO UND LEVEL NACH REGELN (riskPct, setupLevel)
+// ═══════════════════════════════════════════════════════════════════
+testRisiko() =>
+    beginGroup("Risiko & Level")
+    checkF("Entry 100, SL 95 → 5 %",                          akj.riskPct(100.0, 95.0), 5.0)
+    checkF("Short Entry 100, SL 105 → 5 %",                   akj.riskPct(100.0, 105.0), 5.0)
+    checkF("Entry 200, SL 196 → 2 %",                         akj.riskPct(200.0, 196.0), 2.0)
+    checkF("Level nach Regeln entspricht bufLevel (49,95 → 50,03)", akj.setupLevel(R, 49.95, 1), 50.03)
 
-    // ── Serienfunktionen auf der synthetischen Serie (Chart braucht mindestens 30 Kerzen) ──
-    checkI("Serie: 30 Kerzen aufgezeichnet",                            recState.size(), 30)
+// ═══════════════════════════════════════════════════════════════════
+// SERIENFUNKTIONEN auf der synthetischen Serie (bbTrendState, maCalc; Chart braucht mindestens 30 Kerzen)
+// ═══════════════════════════════════════════════════════════════════
+testSerien() =>
+    beginGroup("Serien")
+    checkI("30 Kerzen aufgezeichnet",                         recState.size(), 30)
     if recState.size() == 30
         // Trend: Kerze 12 = erste 110 (oberes Band 104, Vorkerze nicht drüber) → 0; Kerze 13 = zweite 110 → Kauf.
-        checkI("Serie Trend: flach → kein Zustand (Kerze 11)",            recState.get(11), 0)
-        checkI("Serie Trend: erste Kerze über dem Band → noch 0 (Kerze 12)", recState.get(12), 0)
-        checkI("Serie Trend: zweite Kerze über dem Band → Kauf (Kerze 13)", recState.get(13), 1)
-        checkI("Serie Trend: zurück auf 100 hält Kauf (Kerze 20)",        recState.get(20), 1)
-        checkI("Serie Trend: erste Kerze unter dem Band → Kauf bleibt (Kerze 26)", recState.get(26), 1)
-        checkI("Serie Trend: zweite Kerze unter dem Band → Verkauf (Kerze 27)", recState.get(27), -1)
-        checkI("Serie Trend: 100 ist kein Kauf-Trigger → Verkauf bleibt (Kerze 29)", recState.get(29), -1)
+        checkI("Trend: flach → kein Zustand (Kerze 11)",          recState.get(11), 0)
+        checkI("Trend: erste Kerze über dem Band → noch 0 (Kerze 12)", recState.get(12), 0)
+        checkI("Trend: zweite Kerze über dem Band → Kauf (Kerze 13)", recState.get(13), 1)
+        checkI("Trend: zurück auf 100 hält Kauf (Kerze 20)",      recState.get(20), 1)
+        checkI("Trend: erste Kerze unter dem Band → Kauf bleibt (Kerze 26)", recState.get(26), 1)
+        checkI("Trend: zweite Kerze unter dem Band → Verkauf (Kerze 27)", recState.get(27), -1)
+        checkI("Trend: 100 ist kein Kauf-Trigger → Verkauf bleibt (Kerze 29)", recState.get(29), -1)
         // MAs: flach → 100; nach zwei 110ern SMA (8×100 + 2×110) / 10 = 102, EMA 12500 / 121.
-        checkF("Serie SMA: flach → 100 (Kerze 11)",                       recSma.get(11), 100.0)
-        checkF("Serie SMA: nach 2× 110 → 102 (Kerze 13)",                 recSma.get(13), 102.0)
-        checkF("Serie EMA: flach → 100 (Kerze 11)",                       recEma.get(11), 100.0)
-        checkF("Serie EMA: nach 2× 110 → 103,3058 (Kerze 13)",            recEma.get(13), 12500.0 / 121.0)
-        checkB("Serie: EMA ≠ SMA nach dem Sprung",                        math.abs(recEma.get(13) - recSma.get(13)) > 0.5, true)
+        checkF("SMA: flach → 100 (Kerze 11)",                     recSma.get(11), 100.0)
+        checkF("SMA: nach 2× 110 → 102 (Kerze 13)",               recSma.get(13), 102.0)
+        checkF("EMA: flach → 100 (Kerze 11)",                     recEma.get(11), 100.0)
+        checkF("EMA: nach 2× 110 → 103,3058 (Kerze 13)",          recEma.get(13), 12500.0 / 121.0)
+        checkB("EMA ≠ SMA nach dem Sprung",                       math.abs(recEma.get(13) - recSma.get(13)) > 0.5, true)
 
 // ═══════════════════════════════════════════════════════════════════
-// ERGEBNIS: Tabelle in der Chart-Mitte, Fehlschläge zusätzlich in den Pine Logs
+// TESTLAUF (nur einmal, auf der jüngsten Kerze) und ERGEBNIS
+// Oben in der Mitte: Gesamtergebnis, darunter die Bereiche in GRID_COLS Spalten (Name | bestanden/gesamt), damit die
+// Tabelle auch in kleinen Charts ganz sichtbar bleibt. Fehlschläge in einer eigenen Tabelle in der Chart-Mitte.
+// Alle Fehlschläge zusätzlich in den Pine Logs.
 // ═══════════════════════════════════════════════════════════════════
-MAX_ROWS = 25
-var table res = table.new(position.middle_center, 1, MAX_ROWS + 1, border_width = 0)
+GRID_COLS  = 3
+MAX_GROUPS = 30
+MAX_FAILS  = 20
+var table res     = table.new(position.top_center, 2 * GRID_COLS, 2 + int(math.ceil(MAX_GROUPS / GRID_COLS)), border_width = 1, border_color = color.new(color.white, 100))
+var table failTbl = table.new(position.middle_center, 1, MAX_FAILS + 1, border_width = 1, border_color = color.new(color.white, 100))
 if barstate.islast
-    nOk   = array.get(counts, 0)
-    nFail = array.get(counts, 1)
+    testTrend()
+    testPuffer()
+    testFvgAnlegen()
+    testFvgAblauf()
+    testFvgFuellen()
+    testFvgAufraeumen()
+    testFvgTreffer()
+    testVerfall()
+    testKalender()
+    testSektor()
+    testSetupLong()
+    testSetupSignal()
+    testSetupAbbruch()
+    testSetupShort()
+    testRisiko()
+    testSerien()
+
+    nOk   = int(grpOk.sum())
+    nFail = int(grpFail.sum())
     ok    = nFail == 0
     head  = ok ? "✔ Alle " + str.tostring(nOk) + " Tests bestanden" : "✘ " + str.tostring(nFail) + " von " + str.tostring(nOk + nFail) + " Tests fehlgeschlagen"
-    table.cell(res, 0, 0, head, bgcolor = ok ? #2E7D32 : #C62828, text_color = color.white, text_size = size.large, text_formatting = text.format_bold)
-    // Achtung: „for i = 0 to -1“ würde in Pine rückwärts laufen – deshalb die Schleife nur bei Fehlschlägen.
+    hCol  = ok ? #2E7D32 : #C62828
+    // Kopfzeile über die ganze Breite: Text links, Anzahl rechts, dazwischen leere Zellen in derselben Farbe
+    // (ohne table.merge_cells – das liefe bei jedem Kurs-Update erneut).
+    for c = 0 to 2 * GRID_COLS - 1
+        table.cell(res, c, 0, "", bgcolor = hCol)
+    table.cell(res, 0, 0, ok ? "✔ Alle Tests bestanden" : "✘ " + str.tostring(nFail) + " fehlgeschlagen", bgcolor = hCol, text_color = color.white, text_size = size.large, text_formatting = text.format_bold, text_halign = text.align_left)
+    table.cell(res, 2 * GRID_COLS - 1, 0, str.tostring(nOk) + " / " + str.tostring(nOk + nFail), bgcolor = hCol, text_color = color.white, text_size = size.large, text_formatting = text.format_bold, text_halign = text.align_right)
+    // Bereiche zeilenweise in GRID_COLS Spalten (Achtung: „for i = 0 to -1“ liefe in Pine rückwärts – es gibt aber
+    // immer Bereiche).
+    nGrp = math.min(grpName.size(), MAX_GROUPS)
+    for i = 0 to nGrp - 1
+        gOk   = grpOk.get(i)
+        gFail = grpFail.get(i)
+        gCol  = gFail == 0 ? color.new(#2E7D32, 30) : #C62828
+        col   = (i % GRID_COLS) * 2
+        row   = 1 + int(math.floor(i / GRID_COLS))
+        table.cell(res, col, row, grpName.get(i), bgcolor = gCol, text_color = color.white, text_size = size.small, text_halign = text.align_left)
+        table.cell(res, col + 1, row, str.tostring(gOk) + " / " + str.tostring(gOk + gFail), bgcolor = gCol, text_color = color.white, text_size = size.small, text_halign = text.align_right)
+    // Fehlschläge (Bereich – Test: erwartet/erhalten) in der Chart-Mitte.
     if nFail > 0
-        for i = 0 to math.min(array.size(failed), MAX_ROWS) - 1
-            table.cell(res, 0, i + 1, array.get(failed, i), bgcolor = #C62828, text_color = color.white, text_size = size.normal, text_halign = text.align_left)
+        table.cell(failTbl, 0, 0, "Fehlschläge (max. " + str.tostring(MAX_FAILS) + ", alle in den Pine Logs)", bgcolor = #C62828, text_color = color.white, text_size = size.normal, text_formatting = text.format_bold, text_halign = text.align_left)
+        for i = 0 to math.min(failed.size(), MAX_FAILS) - 1
+            table.cell(failTbl, 0, i + 1, failed.get(i), bgcolor = #C62828, text_color = color.white, text_size = size.normal, text_halign = text.align_left)
     for f in failed
         log.error(f)
     log.info(head)
 
-plot(array.get(counts, 1), "Fehlgeschlagene Tests", display = display.data_window)
+plot(int(grpFail.sum()), "Fehlgeschlagene Tests", display = display.data_window)
