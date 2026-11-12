@@ -114,6 +114,9 @@ und meldet Fehler zurück.
   Zeiteinheit abrufen, die nicht höher als das Chart ist – sonst lädt TradingView Intrabar-Daten.
 - Zeichnen auf der jüngsten Kerze (Kästen, Tabellen) nur, wenn sich etwas geändert hat (`fvgDrawn`-Muster), nicht
   bei jedem Tick – `barstate.islast` ist während der Handelszeit bei jedem Kurs-Update wahr.
+- Warn-Tabellen (ADJ im Indikator, Sektor-ETF fehlt in der Strategie): nur anlegen, wenn die Warnung gilt
+  (`var table t = cond ? table.new(…) : table(na)`), und einmal auf `barstate.isfirst` füllen. Eine leere Tabelle mit
+  bgcolor/frame_width zeigt sonst dauerhaft ein kleines farbiges Kästchen in der Chart-Mitte (Bug, Nov. 2026).
 - Plot-Budget: TradingView erlaubt max. 64 plot/bgcolor/fill-Aufrufe je Skript; der Indikator nutzt ~51
   (19 plot, 31 bgcolor, 1 fill). Neue Features sparsam mit plot()/bgcolor() umsetzen.
 - FVGs: sortierte Listen (bullisch absteigend nach top, bärisch aufsteigend nach bot) + Ablauf-Warteschlange je TF;
